@@ -156,3 +156,59 @@ section .bss
     ; Screen redraw tracking flag (1 = redraw needed, 0 = clean)
     need_redraw:            resd 1                      ; Redraw dirty flag
 
+; =============================================================================
+; Task 5 Pomodoro Timer Strings and Buffers (PRD §4.2, §5, §6.4)
+; =============================================================================
+section .data
+
+    ; Timer Phase Titles
+    timer_lbl_focus:            db "FOCUS", CHAR_NULL
+    timer_lbl_short:            db "SHORT BREAK", CHAR_NULL
+    timer_lbl_long:             db "LONG BREAK", CHAR_NULL
+
+    ; Title formatting strings
+    timer_lbl_session_prefix:   db " - Session ", CHAR_NULL
+    timer_lbl_session_suffix:   db " of 4", CHAR_NULL
+    timer_lbl_demo:             db "[DEMO]", CHAR_NULL
+
+    ; Timer Status Strings
+    timer_lbl_paused:           db "PAUSED", CHAR_NULL
+
+    ; Key Help Prompts
+    timer_help_running:         db "[P] Pause    [S] Skip    [Q] Stop and go back", CHAR_NULL
+    timer_help_paused:          db "[P] Resume   [S] Skip    [Q] Stop and go back", CHAR_NULL
+
+    ; Phase Completion Messages (ASCII only, no UTF-8)
+    timer_msg_focus_done:       db "Focus complete! Press any key for a break.", CHAR_NULL
+    timer_msg_break_done:       db "Break over! Press any key to focus.", CHAR_NULL
+
+    ; Duration Tables Indexed by Phase (PHASE_FOCUS=0, PHASE_SHORT_BREAK=1, PHASE_LONG_BREAK=2)
+    timer_durations_normal:
+        dd TIMER_FOCUS_SECS             ; 1500 seconds (25 minutes)
+        dd TIMER_SHORT_BREAK_SECS       ; 300 seconds (5 minutes)
+        dd TIMER_LONG_BREAK_SECS        ; 900 seconds (15 minutes)
+
+    timer_durations_demo:
+        dd TIMER_DEMO_FOCUS_SECS        ; 10 seconds
+        dd TIMER_DEMO_SHORT_BREAK_SECS  ; 5 seconds
+        dd TIMER_DEMO_LONG_BREAK_SECS   ; 8 seconds
+
+    ; Phase Title Pointers Table Indexed by Phase
+    timer_phase_titles:
+        dd timer_lbl_focus
+        dd timer_lbl_short
+        dd timer_lbl_long
+
+    ; Cat Pose Table Indexed by Phase (Pose 1 = Working, Pose 2 = Resting)
+    timer_phase_poses:
+        dd CAT_POSE_WORKING             ; Focus -> Working pose
+        dd CAT_POSE_RESTING             ; Short Break -> Resting pose
+        dd CAT_POSE_RESTING             ; Long Break -> Resting pose
+
+section .bss
+
+    ; Runtime Timer Variables
+    remaining_secs:             resd 1  ; Remaining seconds in current phase
+    total_secs:                 resd 1  ; Total duration in seconds for current phase
+    focus_completed_flag:       resd 1  ; Set to 1 on natural focus completion, 0 on skip/start
+

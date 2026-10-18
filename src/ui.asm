@@ -472,3 +472,98 @@ ui_draw_stub:
     pop eax
     restore_regs
     ret
+
+; -----------------------------------------------------------------------------
+; ui_progress_bar: Append 30-character progress bar and percentage to out_buf.
+;
+; Purpose:  Calculates the proportion of elapsed time (EAX) against total phase
+;           duration (ECX) and formats a 30-character progress bar:
+;           '[' + filled '#' characters + empty '-' characters + ']' + "  " + percentage + '%'.
+;           The number of filled characters is (elapsed * 30) / total.
+;           The percentage is (elapsed * 100) / total.
+;           Arithmetic uses unsigned MUL and DIV, with EDX explicitly zeroed
+;           via 'xor edx, edx' before every DIV (never CDQ).
+;           Elapsed is clamped to total. If total is 0, progress is treated as 100%.
+; IN:       EAX = Elapsed time in seconds
+;           ECX = Total phase duration in seconds
+; OUT:      Appends progress bar text directly to out_buf
+; CLOBBERS: none (EFLAGS only; all registers preserved)
+; -----------------------------------------------------------------------------
+ui_progress_bar:
+    save_regs
+    push eax
+
+    ; Check if total is zero (prevent division by zero)
+    test ecx, ecx
+    jnz .pb_check_clamp
+
+    ; Total is 0: treat as 100% complete
+    mov ebx, PROGRESS_BAR_WIDTH ; 30 filled characters
+    mov edi, PERCENT_SCALE      ; 100%
+    jmp .pb_emit
+
+.pb_check_clamp:
+    ; Clamp elapsed (EAX) to total (ECX)
+    cmp eax, ecx
+    jbe .pb_calc_filled
+    mov eax, ecx                ; Clamp elapsed to total
+
+.pb_calc_filled:
+    ; Calculate filled = (elapsed * PROGRESS_BAR_WIDTH) / total
+    push eax                    ; Save clamped elapsed for percent calculation
+    push ecx                    ; Save total
+
+    mov edx, PROGRESS_BAR_WIDTH ; 30
+    mul edx                     ; EDX:EAX = elapsed * 30
+    xor edx, edx                ; Zero EDX before unsigned 32-bit DIV (never use CDQ)
+    pop ecx                     ; Restore total into ECX
+    div ecx                     ; EAX = quotient (filled), EDX = remainder
+    mov ebx, eax                ; EBX = filled characters (0..30)
+
+    ; Calculate percent = (elapsed * PERCENT_SCALE) / total
+    pop eax                     ; Restore clamped elapsed
+    push ebx                    ; Save filled character count
+    mov edx, PERCENT_SCALE      ; 100
+    mul edx                     ; EDX:EAX = elapsed * 100
+    xor edx, edx                ; Zero EDX before unsigned 32-bit DIV
+    div ecx                     ; EAX = quotient (percentage 0..100)
+    mov edi, eax                ; EDI = percentage (0..100)
+    pop ebx                     ; Restore filled character count
+
+.pb_emit:
+    ; 1. Emit '['
+    mov al, CHAR_LBRACKET
+    call buf_char
+
+    ; 2. Emit filled '#' characters (EBX times)
+    mov al, CHAR_HASH
+    mov ecx, ebx
+    call buf_repeat
+
+    ; 3. Emit empty '-' characters (PROGRESS_BAR_WIDTH - EBX times)
+    mov al, CHAR_MINUS
+    mov ecx, PROGRESS_BAR_WIDTH
+    sub ecx, ebx
+    call buf_repeat
+
+    ; 4. Emit ']'
+    mov al, CHAR_RBRACKET
+    call buf_char
+
+    ; 5. Emit two spaces "  "
+    mov al, CHAR_SPACE
+    call buf_char
+    mov al, CHAR_SPACE
+    call buf_char
+
+    ; 6. Emit percentage integer as decimal digits
+    mov eax, edi
+    call buf_u32
+
+    ; 7. Emit '%'
+    mov al, CHAR_PERCENT
+    call buf_char
+
+    pop eax
+    restore_regs
+    ret

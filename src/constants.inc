@@ -235,3 +235,50 @@ KEY_3                   equ 51          ; ASCII '3'
 KEY_4                   equ 52          ; ASCII '4'
 KEY_B                   equ 66          ; ASCII 'B' (uppercase, from key_wait)
 
+; =============================================================================
+; Task 5 Additions: Pomodoro Timer Engine & UI Constants (PRD §4.2, §5, §6.4)
+; =============================================================================
+; Pomodoro Phase Identifiers
+PHASE_FOCUS             equ 0           ; Active work/focus period
+PHASE_SHORT_BREAK       equ 1           ; Rest period between regular sessions
+PHASE_LONG_BREAK        equ 2           ; Extended rest period after full cycle
+
+; Progress Bar Geometry and Scale (PRD §4.2 FR-T3, §6.4)
+PROGRESS_BAR_WIDTH      equ 30          ; Progress bar inner width in characters
+PERCENT_SCALE           equ 100         ; Percentage multiplication scale (100%)
+
+; Additional ASCII Characters for Progress Bar & Timer UI
+CHAR_HASH               equ 35          ; ASCII '#' (progress bar filled character)
+CHAR_PERCENT            equ 37          ; ASCII '%' (percentage symbol)
+CHAR_RBRACKET           equ 93          ; ASCII ']' (right square bracket)
+
+; Sub-second Tick Rate
+TICKS_PER_SECOND        equ 10          ; Number of 100ms ticks per second
+
+; Timer Interactive Key Codes (Uppercase, from key_poll / key_wait)
+KEY_P                   equ 80          ; ASCII 'P' (Pause / Resume toggle)
+KEY_S                   equ 83          ; ASCII 'S' (Skip phase)
+
+; Timer Screen Row Coordinates (56-column frame)
+UI_TIMER_ROW_TOP        equ 1           ; Top border row
+UI_TIMER_ROW_TITLE      equ 2           ; Title row ("FOCUS - Session n of 4" / [DEMO])
+UI_TIMER_ROW_BLANK1     equ 3           ; Blank row between title and cat
+UI_TIMER_ROW_CAT1       equ 4           ; Cat ASCII art line 1 row
+UI_TIMER_ROW_CAT2       equ 5           ; Cat line 2 and time display row (MM:SS / PAUSED)
+UI_TIMER_ROW_CAT3       equ 6           ; Cat line 3 row
+UI_TIMER_ROW_PROGRESS   equ 7           ; Progress bar row
+UI_TIMER_ROW_MSG        equ 8           ; Blank / phase completion message row
+UI_TIMER_ROW_HELP       equ 9           ; Key navigation help row
+UI_TIMER_ROW_BOTTOM     equ 10          ; Bottom border row
+UI_TIMER_ROW_BELOW      equ 11          ; Row below frame for erase_eos (ESC[J)
+
+; Timer Screen Column Coordinates
+UI_TIMER_COL_TITLE      equ 4           ; Title text column
+UI_TIMER_COL_DEMO       equ 46          ; [DEMO] badge column
+UI_TIMER_COL_CAT        equ 6           ; Cat ASCII art start column
+UI_TIMER_COL_TIME       equ 20          ; MM:SS display column
+UI_TIMER_COL_PAUSED     equ 27          ; PAUSED status label column
+UI_TIMER_COL_PROGRESS   equ 5           ; Progress bar start column
+UI_TIMER_COL_MSG        equ 4           ; Phase completion message column
+UI_TIMER_COL_HELP       equ 4           ; Key help text column
+

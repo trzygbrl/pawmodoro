@@ -22,6 +22,7 @@ section .text
 %include "src/term.asm"
 %include "src/time.asm"
 %include "src/ui.asm"
+%include "src/timer.asm"
 
     global _start
 
@@ -61,9 +62,6 @@ _start:
     cmp eax, STATE_MENU
     je .render_menu
 
-    cmp eax, STATE_TIMER
-    je .render_timer
-
     cmp eax, STATE_HABITS
     je .render_habits
 
@@ -79,11 +77,6 @@ _start:
 
 .render_menu:
     call ui_draw_menu
-    jmp .flush_frame
-
-.render_timer:
-    mov esi, title_timer
-    call ui_draw_stub
     jmp .flush_frame
 
 .render_habits:
@@ -113,9 +106,6 @@ _start:
     cmp edx, STATE_MENU
     je .handle_menu_key
 
-    cmp edx, STATE_TIMER
-    je .handle_stub_key
-
     cmp edx, STATE_HABITS
     je .handle_stub_key
 
@@ -137,7 +127,7 @@ _start:
     cmp eax, KEY_CTRL_C
     je .handle_exit
 
-    ; '1' -> Enter Pomodoro Timer stub screen
+    ; '1' -> Enter Pomodoro Timer (calls timer_run per Task 5)
     cmp eax, KEY_1
     je .menu_to_timer
 
@@ -157,7 +147,9 @@ _start:
     jmp .main_loop
 
 .menu_to_timer:
-    mov dword [state], STATE_TIMER
+    call timer_run
+    cmp dword [state], STATE_QUIT
+    je .handle_exit
     mov dword [need_redraw], 1
     jmp .main_loop
 
