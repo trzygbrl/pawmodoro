@@ -144,8 +144,8 @@ section .data
 
     ; Dashboard summary statistics placeholders (T6/T7 will replace with real data)
     dash_pomodoros:         dd 0
-    dash_habits_done:       dd 2
-    dash_habits_total:      dd 4
+    dash_habits_done:       dd 0
+    dash_habits_total:      dd 0
 
 section .bss
 
@@ -234,4 +234,39 @@ section .bss
 
     ; Persistence Status Flag (0 = OK, 1 = Save Failed)
     stats_save_failed:          resd 1          ; Save failure indicator for timer UI
+
+; =============================================================================
+; Task 7 Habit Tracker Data & Buffers (PRD §4.3, §4.5 FR-D3)
+; =============================================================================
+section .data
+
+    ; File Paths (relative to current working directory)
+    path_habits:                db "habits.dat", CHAR_NULL
+
+    ; Screen Headers & UI Labels
+    habits_hdr:                 db "#  HABIT        LAST 7 DAYS         STREAK TOTAL", CHAR_NULL
+    habits_help:                db "[A] Add  [1-8] Check in today  [D] Delete  [B] Back", CHAR_NULL
+
+    ; Feedback and Status Messages (ASCII only)
+    habit_msg_empty:            db "No habits yet - press A to add one.", CHAR_NULL
+    habit_msg_checked_in:       db "Checked in!", CHAR_NULL
+    habit_msg_already:          db "Already done today", CHAR_NULL
+    habit_msg_full:             db "Habit list full (max 8)", CHAR_NULL
+    habit_msg_no_habit:         db "No such habit", CHAR_NULL
+    habit_msg_no_delete:        db "No habits to delete", CHAR_NULL
+    habit_msg_deleted:          db "Habit deleted", CHAR_NULL
+    habit_msg_add_prompt:       db "New habit name (max 31, Enter alone cancels): ", CHAR_NULL
+    habit_msg_del_prompt:       db "Delete which habit? (1-N, other key cancels): ", CHAR_NULL
+
+section .bss
+
+    ; Contiguous habit storage block for habits.dat (PRD §4.3 FR-H1, §4.5 FR-D3)
+    ; Layout: count (dword, 0..8) followed by 8 records of 48 bytes (384 bytes)
+    ; Total size = 388 bytes (dedicated persistent store)
+    habit_data:
+    habit_count:                resd 1
+    habit_records:              resb (MAX_HABITS * HABIT_RECORD_SIZE)
+
+    ; Runtime UI message pointer (0 = none, or pointer to NUL-terminated ASCII string)
+    habit_msg:                  resd 1
 

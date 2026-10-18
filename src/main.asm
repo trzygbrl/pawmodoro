@@ -25,6 +25,7 @@ section .text
 %include "src/file.asm"
 %include "src/stats.asm"
 %include "src/timer.asm"
+%include "src/habits.asm"
 
     global _start
 
@@ -46,6 +47,7 @@ _start:
     call term_init
     call term_raw
     call stats_load             ; Load persisted stats.dat into memory & sync dashboard (FR-U7, FR-D2)
+    call habits_load            ; Load persisted habits.dat into memory & sync dashboard (FR-U7, FR-D3)
 
     mov dword [state], STATE_MENU
     mov dword [demo_mode], 0
@@ -65,9 +67,6 @@ _start:
     cmp eax, STATE_MENU
     je .render_menu
 
-    cmp eax, STATE_HABITS
-    je .render_habits
-
     cmp eax, STATE_JOURNAL
     je .render_journal
 
@@ -80,11 +79,6 @@ _start:
 
 .render_menu:
     call ui_draw_menu
-    jmp .flush_frame
-
-.render_habits:
-    mov esi, title_habits
-    call ui_draw_stub
     jmp .flush_frame
 
 .render_journal:
@@ -108,9 +102,6 @@ _start:
 
     cmp edx, STATE_MENU
     je .handle_menu_key
-
-    cmp edx, STATE_HABITS
-    je .handle_stub_key
 
     cmp edx, STATE_JOURNAL
     je .handle_stub_key
@@ -157,7 +148,11 @@ _start:
     jmp .main_loop
 
 .menu_to_habits:
-    mov dword [state], STATE_HABITS
+    call habits_run
+    cmp dword [state], STATE_QUIT
+    je .handle_exit
+    mov dword [state], STATE_MENU
+    call habits_sync_dashboard
     mov dword [need_redraw], 1
     jmp .main_loop
 

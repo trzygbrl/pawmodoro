@@ -303,3 +303,55 @@ STATS_OFFSET_TOTAL      equ 8           ; Offset of total_count field (dword)
 STATS_SAVE_OK           equ 0           ; Last save succeeded
 STATS_SAVE_FAILED       equ 1           ; Last save failed
 
+; =============================================================================
+; Task 7 Additions: Habit Tracker Constants (PRD §4.3, §4.5, §5, §6.4)
+; =============================================================================
+; Additional ASCII Characters and Key Codes
+CHAR_DOT                equ 46          ; ASCII '.' (empty history square)
+CHAR_QUESTION           equ 63          ; ASCII '?' (sanitized unprintable character)
+
+KEY_5                   equ 53          ; ASCII '5'
+KEY_6                   equ 54          ; ASCII '6'
+KEY_7                   equ 55          ; ASCII '7'
+KEY_8                   equ 56          ; ASCII '8'
+KEY_A                   equ 65          ; ASCII uppercase 'A' (Add habit)
+KEY_D                   equ 68          ; ASCII uppercase 'D' (Delete habit)
+
+; Habit Record Offsets and File Geometry (PRD §4.3 FR-H1, §4.5 FR-D3)
+HABIT_OFFSET_NAME       equ 0           ; Offset of name[32] string
+HABIT_OFFSET_LAST_DAY   equ 32          ; Offset of last_day dword
+HABIT_OFFSET_STREAK     equ 36          ; Offset of streak dword
+HABIT_OFFSET_TOTAL      equ 40          ; Offset of total dword
+HABIT_OFFSET_HISTORY    equ 44          ; Offset of history dword (32-bit bitmask)
+
+HABIT_HEADER_SIZE       equ 4           ; Size of habit_count dword in habits.dat
+HABIT_MAX_FILE_SIZE     equ 388         ; 4 + (MAX_HABITS * HABIT_RECORD_SIZE) = 4 + 384
+HABIT_MIN_FILE_SIZE     equ 4           ; Minimum valid file size (count dword)
+
+HABIT_NAME_DISPLAY      equ 12          ; Truncated display width for habit name
+HABIT_DAYS_DISPLAY      equ 7           ; Number of history days displayed (squares)
+BITS_PER_DWORD          equ 32          ; 32 bits for shift guard check
+
+; Habit Screen Row Coordinates (56-column frame)
+UI_HAB_ROW_TOP          equ 1           ; Top border row
+UI_HAB_ROW_TITLE        equ 2           ; Title row ("HABIT TRACKER")
+UI_HAB_ROW_HEADER       equ 3           ; Column headers row (# HABIT LAST 7 DAYS...)
+UI_HAB_ROW_SEP          equ 4           ; Separator border row
+UI_HAB_ROW_FIRST        equ 5           ; First habit record row (Row 5)
+UI_HAB_ROW_LAST         equ 12          ; Last habit record row (Row 12, max 8 habits)
+UI_HAB_ROW_BLANK        equ 13          ; Blank spacing row
+UI_HAB_ROW_MSG          equ 14          ; User prompt / feedback message row
+UI_HAB_ROW_HELP         equ 15          ; Key help prompt row
+UI_HAB_ROW_BOTTOM       equ 16          ; Bottom border row
+UI_HAB_ROW_BELOW        equ 17          ; Row below frame for erase_eos (ESC[J)
+
+; Habit Screen Column Coordinates
+UI_HAB_COL_TITLE        equ 4           ; Title start column
+UI_HAB_COL_NUM          equ 4           ; Habit number column
+UI_HAB_COL_NAME         equ 7           ; Habit name start column
+UI_HAB_COL_SQUARES      equ 20          ; 7-day history squares start column
+UI_HAB_COL_STREAK       equ 43          ; Streak count column
+UI_HAB_COL_TOTAL        equ 50          ; Total check-in count column
+UI_HAB_COL_MSG          equ 4           ; Message text column
+UI_HAB_COL_HELP         equ 4           ; Key help text column
+
