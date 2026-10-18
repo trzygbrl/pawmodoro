@@ -89,3 +89,9 @@ section .data
 
 section .bss
     term_active:            resd 1                      ; Terminal active flag (1 = active, 0 = restored)
+
+; =============================================================================
+; Task 3 Time & Date Buffers (PRD §6.4)
+; =============================================================================
+    date_buf:               resb DATE_BUF_SIZE          ; 11 bytes: "YYYY-MM-DD\0"
+    time_buf:               resb TIME_BUF_SIZE          ; 6 bytes: "HH:MM\0"

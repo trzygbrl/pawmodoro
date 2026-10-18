@@ -140,3 +140,39 @@ CASE_BIT_MASK           equ 0x20        ; Bit 5 mask for ASCII case conversion
 KEY_Q                   equ 81          ; ASCII uppercase 'Q' (Quit key)
 KEY_T                   equ 84          ; ASCII uppercase 'T' (Type line demo key)
 READ_LINE_DEMO_MAX      equ 20          ; Demo line length limit for read_line test
+
+; =============================================================================
+; Time and Date Constants (Task 3 Additions, PRD §6.3, §6.4)
+; =============================================================================
+NANOSLEEP_100MS         equ 100000000   ; 100 ms in nanoseconds (for time_sleep_100ms)
+SECONDS_PER_HOUR        equ 3600        ; Seconds in 1 hour (for HH:MM calculation)
+DATE_BUF_SIZE           equ 11          ; 11 bytes: "YYYY-MM-DD\0"
+TIME_BUF_SIZE           equ 6           ; 6 bytes: "HH:MM\0"
+
+; Howard Hinnant's civil_from_days algorithm constants
+CIVIL_EPOCH_SHIFT       equ 719468      ; Days from 0000-03-01 to 1970-01-01
+CIVIL_ERA_DAYS          equ 146097      ; Days in one 400-year Gregorian cycle (era)
+CIVIL_YEARS_ERA         equ 400         ; Years in one Gregorian era
+CIVIL_YEARS_CENTURY     equ 100         ; Years in a century (for yoe/100)
+CIVIL_DAYS_4Y           equ 1460        ; Days in 4 years (365*4)
+CIVIL_DAYS_100Y         equ 36524       ; Days in 100 years excluding century leap
+CIVIL_DAYS_400Y_M1      equ 146096      ; 146097 - 1 (boundary check divisor)
+CIVIL_DAYS_YEAR         equ 365         ; Standard days in a non-leap year
+CIVIL_MONTH_SCALE       equ 153         ; Scale factor for month calculation (5-month cycle: 153 days)
+CIVIL_MONTH_SHIFT       equ 2           ; Offset shift in Hinnant month formula
+CIVIL_DAY_SCALE         equ 5           ; Divisor for day-of-month calculation
+CIVIL_MONTH_CUTOFF      equ 10          ; Cutoff threshold separating Jan/Feb from Mar..Dec
+CIVIL_MONTH_ADJ_EARLY   equ 3           ; Month adjustment for March..December (m = mp + 3)
+CIVIL_MONTH_ADJ_LATE    equ 9           ; Month adjustment for January..February (m = mp - 9)
+CIVIL_YEAR_ADJ_MONTH    equ 2           ; Month threshold (m <= 2) for Gregorian year roll-over
+
+; Decimal radix powers for zero-padded numeric string formatting
+DECIMAL_1000            equ 1000        ; Divisor for thousands digit in 4-digit formatting
+DECIMAL_100             equ 100         ; Divisor for hundreds digit in 4-digit formatting
+
+; Task 3 Test Vectors and Demo Constants
+TEST_VECTOR_0           equ 0           ; Day number for 1970-01-01
+TEST_VECTOR_10957       equ 10957       ; Day number for 2000-01-01 (Y2K)
+TEST_VECTOR_19723       equ 19723       ; Day number for 2024-01-01
+SLEEP_DEMO_COUNT        equ 10          ; 10 iterations of 100ms sleep for demo
+
