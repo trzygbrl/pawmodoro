@@ -126,3 +126,17 @@ STATE_TIMER             equ 1           ; Pomodoro active timer
 STATE_HABITS            equ 2           ; Habit tracker view/edit
 STATE_JOURNAL           equ 3           ; Journal view/add
 STATE_QUIT              equ 4           ; Application exit state
+
+; =============================================================================
+; Terminal & Key Processing Constants (Task 2 Additions)
+; =============================================================================
+FD_STDERR               equ 2           ; Standard error file descriptor
+NANOSLEEP_50MS          equ 50000000    ; 50 ms in nanoseconds (for key_wait polling)
+
+CHAR_LOWER_A            equ 97          ; ASCII lowercase 'a'
+CHAR_LOWER_Z            equ 122         ; ASCII lowercase 'z'
+CASE_BIT_MASK           equ 0x20        ; Bit 5 mask for ASCII case conversion
+
+KEY_Q                   equ 81          ; ASCII uppercase 'Q' (Quit key)
+KEY_T                   equ 84          ; ASCII uppercase 'T' (Type line demo key)
+READ_LINE_DEMO_MAX      equ 20          ; Demo line length limit for read_line test

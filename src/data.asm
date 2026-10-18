@@ -79,3 +79,13 @@ section .bss
     session_no:             resd 1                      ; Focus session counter (1..4)
     ticks:                  resd 1                      ; Sub-second elapsed ticks
     paused:                 resd 1                      ; Timer paused flag (0 = running, 1 = paused)
+
+; =============================================================================
+; Task 2 Terminal Control Additions
+; =============================================================================
+section .data
+    err_not_a_tty:          db "Error: Standard input is not a terminal.", CHAR_LF
+    err_not_a_tty_len:      equ $ - err_not_a_tty
+
+section .bss
+    term_active:            resd 1                      ; Terminal active flag (1 = active, 0 = restored)
