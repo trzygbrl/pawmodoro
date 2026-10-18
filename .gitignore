@@ -1,0 +1,8 @@
+# Build artifacts directory
+build/
+
+# Runtime persistence data files (stats and habits)
+*.dat
+
+# Journal entries log file
+journal.txt
