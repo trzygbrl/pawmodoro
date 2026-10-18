@@ -22,6 +22,8 @@ section .text
 %include "src/term.asm"
 %include "src/time.asm"
 %include "src/ui.asm"
+%include "src/file.asm"
+%include "src/stats.asm"
 %include "src/timer.asm"
 
     global _start
@@ -43,6 +45,7 @@ _start:
     ; -------------------------------------------------------------------------
     call term_init
     call term_raw
+    call stats_load             ; Load persisted stats.dat into memory & sync dashboard (FR-U7, FR-D2)
 
     mov dword [state], STATE_MENU
     mov dword [demo_mode], 0

@@ -143,7 +143,7 @@ section .data
     stub_key_help:          db "[B] Back", CHAR_NULL
 
     ; Dashboard summary statistics placeholders (T6/T7 will replace with real data)
-    dash_pomodoros:         dd 3
+    dash_pomodoros:         dd 0
     dash_habits_done:       dd 2
     dash_habits_total:      dd 4
 
@@ -211,4 +211,27 @@ section .bss
     remaining_secs:             resd 1  ; Remaining seconds in current phase
     total_secs:                 resd 1  ; Total duration in seconds for current phase
     focus_completed_flag:       resd 1  ; Set to 1 on natural focus completion, 0 on skip/start
+
+; =============================================================================
+; Task 6 File Persistence & Pomodoro Statistics (PRD §4.5 FR-D2, FR-D4)
+; =============================================================================
+section .data
+
+    ; File Paths (relative to current working directory)
+    path_stats:                 db "stats.dat", CHAR_NULL
+
+    ; Error & Warning Messages
+    err_could_not_save:         db "Could not save", CHAR_NULL
+
+section .bss
+
+    ; Contiguous 12-byte stats.dat record structure (PRD §4.5 FR-D2)
+    ; Layout: day (dword, offset 0), today_count (dword, offset 4), total_count (dword, offset 8)
+    stats_data:
+    stats_day:                  resd 1          ; Day number of last completed session
+    stats_today_count:          resd 1          ; Completed focus sessions today
+    stats_total_count:          resd 1          ; All-time completed focus sessions
+
+    ; Persistence Status Flag (0 = OK, 1 = Save Failed)
+    stats_save_failed:          resd 1          ; Save failure indicator for timer UI
 

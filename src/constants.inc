@@ -282,3 +282,24 @@ UI_TIMER_COL_PROGRESS   equ 5           ; Progress bar start column
 UI_TIMER_COL_MSG        equ 4           ; Phase completion message column
 UI_TIMER_COL_HELP       equ 4           ; Key help text column
 
+; =============================================================================
+; Task 6 Additions: File Persistence & Pomodoro Statistics (PRD §4.5 FR-D2, FR-D4)
+; =============================================================================
+; File Operation Return Codes and Error Sentinels
+FILE_OK                 equ 0           ; File operation success code
+FILE_ERR                equ -1          ; File operation error code / missing file
+
+; File Open Combined Flags (sys_open, PRD §3.1)
+O_SAVE_FLAGS            equ (O_WRONLY | O_CREAT | O_TRUNC)  ; 0x241 (577 dec) - Truncate and write
+O_APPEND_FLAGS          equ (O_WRONLY | O_CREAT | O_APPEND) ; 0x441 (1089 dec) - Append to end of file
+
+; Stats Record Layout & Size (PRD §4.5 FR-D2: 12 bytes little-endian dwords)
+STATS_RECORD_SIZE       equ 12          ; Size of stats.dat record in bytes (3 dwords)
+STATS_OFFSET_DAY        equ 0           ; Offset of day field (dword)
+STATS_OFFSET_TODAY      equ 4           ; Offset of today_count field (dword)
+STATS_OFFSET_TOTAL      equ 8           ; Offset of total_count field (dword)
+
+; Stats Save Status Flag Values
+STATS_SAVE_OK           equ 0           ; Last save succeeded
+STATS_SAVE_FAILED       equ 1           ; Last save failed
+

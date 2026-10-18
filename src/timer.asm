@@ -199,6 +199,27 @@ timer_draw:
     mov esi, ansi_reset
     call buf_str
 
+    ; Check if "Could not save" warning should be displayed on Row 3 (FR-D4)
+    ; Displayed ONLY on FOCUS completion frames when stats_save_failed == 1
+    cmp dword [phase], PHASE_FOCUS
+    jne .skip_msg
+
+    cmp dword [stats_save_failed], STATS_SAVE_FAILED
+    jne .skip_msg
+
+    mov eax, UI_TIMER_ROW_BLANK1
+    mov ebx, UI_TIMER_COL_MSG
+    call buf_goto
+
+    mov esi, ansi_bold
+    call buf_str
+    mov esi, ansi_fg_bright_red
+    call buf_str
+    mov esi, err_could_not_save
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+
 .skip_msg:
     ; 8. Key help prompt at Row 9, Col 4
     mov eax, UI_TIMER_ROW_HELP
@@ -242,6 +263,7 @@ timer_phase_start:
     cmp dword [phase], PHASE_FOCUS
     jne .phase_load_duration
     mov dword [focus_completed_flag], 0
+    mov dword [stats_save_failed], STATS_SAVE_OK
 
 .phase_load_duration:
     ; Choose duration table according to demo_mode
@@ -485,7 +507,7 @@ timer_run:
     cmp dword [phase], PHASE_FOCUS
     jne .draw_completion_frame
     mov dword [focus_completed_flag], 1
-    ; T6 HOOK: call stats_add_pomodoro here
+    call stats_add_pomodoro
 
 .draw_completion_frame:
     ; Draw completion frame with completion message
