@@ -176,3 +176,62 @@ TEST_VECTOR_10957       equ 10957       ; Day number for 2000-01-01 (Y2K)
 TEST_VECTOR_19723       equ 19723       ; Day number for 2024-01-01
 SLEEP_DEMO_COUNT        equ 10          ; 10 iterations of 100ms sleep for demo
 
+; =============================================================================
+; Task 4 Additions: UI Frame Geometry, Cat Art & Shell Navigation (PRD §4.1, §5)
+; =============================================================================
+UI_FRAME_WIDTH          equ 56          ; Total frame width in columns
+UI_FRAME_INNER_WIDTH    equ 54          ; Inner horizontal border width (56 - 2)
+UI_FRAME_COL_LEFT       equ 1           ; Left border column
+UI_FRAME_COL_RIGHT      equ 56          ; Right border column
+
+; Main Menu Row Coordinates
+UI_MENU_ROW_TOP         equ 1           ; Top border row
+UI_MENU_ROW_TITLE       equ 2           ; Title and Cat line 1 row
+UI_MENU_ROW_TAGLINE     equ 3           ; Tagline and Cat line 2 row
+UI_MENU_ROW_CAT3        equ 4           ; Cat line 3 row
+UI_MENU_ROW_SEP         equ 5           ; Middle separator border row
+UI_MENU_ROW_DASH        equ 6           ; Dashboard summary statistics row
+UI_MENU_ROW_BLANK       equ 7           ; Blank spacing row
+UI_MENU_ROW_ITEM1       equ 8           ; Menu option 1 (Timer) row
+UI_MENU_ROW_ITEM2       equ 9           ; Menu option 2 (Habits) row
+UI_MENU_ROW_ITEM3       equ 10          ; Menu option 3 (Journal) row
+UI_MENU_ROW_ITEM4       equ 11          ; Menu option 4 (Demo mode) row
+UI_MENU_ROW_ITEMQ       equ 12          ; Menu option Q (Quit) row
+UI_MENU_ROW_BOTTOM      equ 13          ; Bottom border row
+UI_MENU_ROW_BELOW       equ 14          ; Row below frame for erase_eos
+
+; Main Menu Column Coordinates
+UI_MENU_COL_CAT         equ 4           ; Cat ASCII art column
+UI_MENU_COL_TITLE       equ 14          ; Main title & tagline column
+UI_MENU_COL_CONTENT     equ 4           ; Dashboard and menu items column
+
+; Stub Screen Row Coordinates
+UI_STUB_ROW_TOP         equ 1           ; Top border row
+UI_STUB_ROW_TITLE       equ 2           ; Screen title row
+UI_STUB_ROW_SEP         equ 3           ; Separator border row
+UI_STUB_ROW_BLANK1      equ 4           ; Blank spacing row
+UI_STUB_ROW_MSG         equ 5           ; "Coming soon" message row
+UI_STUB_ROW_BLANK2      equ 6           ; Blank spacing row
+UI_STUB_ROW_KEY         equ 7           ; Key help ("[B] Back") row
+UI_STUB_ROW_BOTTOM      equ 8           ; Bottom border row
+UI_STUB_ROW_BELOW       equ 9           ; Row below frame for erase_eos
+
+; Stub Screen Column Coordinates
+UI_STUB_COL_TITLE       equ 4           ; Title text column
+UI_STUB_COL_CONTENT     equ 4           ; Message and key text column
+
+; Cat Poses (PRD §6.4)
+CAT_POSE_IDLE           equ 0           ; Pose 0: Idle cat (main menu)
+CAT_POSE_WORKING        equ 1           ; Pose 1: Working / focused eyes (timer focus)
+CAT_POSE_RESTING        equ 2           ; Pose 2: Resting / sleeping (timer break)
+CAT_POSE_MAX            equ 2           ; Maximum valid pose index
+CAT_LINES               equ 3           ; Number of lines in cat ASCII art
+
+; Keyboard Input Constants (Task 4 Additions)
+CHAR_SLASH              equ 47          ; Slash symbol ('/')
+KEY_1                   equ 49          ; ASCII '1'
+KEY_2                   equ 50          ; ASCII '2'
+KEY_3                   equ 51          ; ASCII '3'
+KEY_4                   equ 52          ; ASCII '4'
+KEY_B                   equ 66          ; ASCII 'B' (uppercase, from key_wait)
+

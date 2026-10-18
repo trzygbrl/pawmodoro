@@ -1,10 +1,8 @@
 ; =============================================================================
-; Pawmodoro - Main Entry Point (src/main.asm)
+; Pawmodoro - Main Entry Point & Finite State Machine (src/main.asm)
 ;
-; Purpose: Top-level entry point and Task 3 time & date verification demo.
-; Note:    This is the Task 3 (task-3-time) temporary demo. It queries the local
-;          day number, calendar date, and HH:MM time, verifies the Hinnant test
-;          vectors, tests 10 x 100 ms sleep, and cleanly exits with status 0.
+; Purpose: Top-level application shell, lifecycle initialization, main loop,
+;          and finite state machine dispatch per PRD §4.1 (FR-U1, FR-U3, FR-U5).
 ; =============================================================================
 
 ; -----------------------------------------------------------------------------
@@ -16,18 +14,6 @@
 %include "src/data.asm"
 
 ; =============================================================================
-; DEMO DATA ASSETS (Specific to Task 3 Demo, Temporary)
-; =============================================================================
-section .data
-    demo_lbl_day_num:       db "Today's day number: ", CHAR_NULL
-    demo_lbl_today_date:    db "Today's date: ", CHAR_NULL
-    demo_lbl_local_time:    db "Current local time (HH:MM): ", CHAR_NULL
-    demo_lbl_vec_0:         db "Day 0: ", CHAR_NULL
-    demo_lbl_vec_10957:     db "Day 10957: ", CHAR_NULL
-    demo_lbl_vec_19723:     db "Day 19723: ", CHAR_NULL
-    demo_lbl_sleep:         db "Slept 10 x 100 ms", CHAR_LF, CHAR_NULL
-
-; =============================================================================
 ; TEXT SECTION (.text)
 ; =============================================================================
 section .text
@@ -35,117 +21,187 @@ section .text
 %include "src/io.asm"
 %include "src/term.asm"
 %include "src/time.asm"
+%include "src/ui.asm"
 
     global _start
 
 ; -----------------------------------------------------------------------------
-; _start: Program entry point for Task 3 Time & Date Demo.
+; _start: Program entry point and shell finite state machine.
 ;
-; Purpose:  Executes verification steps per PRD Task 3 requirements:
-;           1. Print today's day number (time_today + buf_u32).
-;           2. Print today's date (time_today + time_fmt_date + buf_str).
-;           3. Print current local time (time_local + time_fmt_hhmm + buf_str).
-;           4. Print the three test vectors (days 0, 10957, 19723).
-;           5. Execute 10 x 100ms sleeps via time_sleep_100ms and report completion.
+; Purpose:  Initializes terminal raw mode, configures initial application state
+;           (STATE_MENU), enters the non-blocking event loop, dispatches renderers
+;           on need_redraw, sleeps 50 ms via key_wait when idle, and ensures
+;           term_restore is executed on all exit paths.
 ; IN:       none
-; OUT:      none (process exits with status 0)
+; OUT:      none (process exits with status 0 via sys_exit)
 ; CLOBBERS: EAX, EBX, ECX, EDX, ESI, EDI (irrelevant after process exit)
 ; -----------------------------------------------------------------------------
 _start:
     ; -------------------------------------------------------------------------
-    ; 1. Today's day number: time_today + buf_u32
+    ; Step 1: Terminal Initialization & State Setup (FR-U1)
     ; -------------------------------------------------------------------------
-    mov esi, demo_lbl_day_num
-    call buf_str
-    call time_today             ; EAX = day number
-    call buf_u32
-    mov al, CHAR_LF
-    call buf_char
+    call term_init
+    call term_raw
+
+    mov dword [state], STATE_MENU
+    mov dword [demo_mode], 0
+    mov dword [need_redraw], 1
 
     ; -------------------------------------------------------------------------
-    ; 2. Today's date: time_today -> time_fmt_date -> print buffer
+    ; Step 2: Main Event & Redraw Loop (FR-U3, FR-U4)
     ; -------------------------------------------------------------------------
-    mov esi, demo_lbl_today_date
-    call buf_str
-    call time_today             ; EAX = day number
-    mov edi, date_buf
-    call time_fmt_date          ; writes "YYYY-MM-DD\0" into date_buf
-    mov esi, date_buf
-    call buf_str
-    mov al, CHAR_LF
-    call buf_char
+.main_loop:
+    ; Check if screen needs redraw
+    cmp dword [need_redraw], 0
+    je .wait_for_input
 
-    ; -------------------------------------------------------------------------
-    ; 3. Current local time as HH:MM: time_local -> time_fmt_hhmm -> print buffer
-    ; -------------------------------------------------------------------------
-    mov esi, demo_lbl_local_time
-    call buf_str
-    call time_local             ; EAX = local seconds
-    mov edi, time_buf
-    call time_fmt_hhmm          ; writes "HH:MM\0" into time_buf
-    mov esi, time_buf
-    call buf_str
-    mov al, CHAR_LF
-    call buf_char
+    ; Dispatch renderer according to current state
+    mov eax, [state]
 
-    ; -------------------------------------------------------------------------
-    ; 4. Test vectors: days 0, 10957, 19723
-    ; -------------------------------------------------------------------------
-    ; Vector 1: Day 0 -> 1970-01-01
-    mov esi, demo_lbl_vec_0
-    call buf_str
-    mov eax, TEST_VECTOR_0
-    mov edi, date_buf
-    call time_fmt_date
-    mov esi, date_buf
-    call buf_str
-    mov al, CHAR_LF
-    call buf_char
+    cmp eax, STATE_MENU
+    je .render_menu
 
-    ; Vector 2: Day 10957 -> 2000-01-01
-    mov esi, demo_lbl_vec_10957
-    call buf_str
-    mov eax, TEST_VECTOR_10957
-    mov edi, date_buf
-    call time_fmt_date
-    mov esi, date_buf
-    call buf_str
-    mov al, CHAR_LF
-    call buf_char
+    cmp eax, STATE_TIMER
+    je .render_timer
 
-    ; Vector 3: Day 19723 -> 2024-01-01
-    mov esi, demo_lbl_vec_19723
-    call buf_str
-    mov eax, TEST_VECTOR_19723
-    mov edi, date_buf
-    call time_fmt_date
-    mov esi, date_buf
-    call buf_str
-    mov al, CHAR_LF
-    call buf_char
+    cmp eax, STATE_HABITS
+    je .render_habits
 
-    ; Flush output buffer before starting sleep test
+    cmp eax, STATE_JOURNAL
+    je .render_journal
+
+    cmp eax, STATE_QUIT
+    je .handle_exit
+
+    ; Unknown state fallback: return to menu
+    mov dword [state], STATE_MENU
+    jmp .render_menu
+
+.render_menu:
+    call ui_draw_menu
+    jmp .flush_frame
+
+.render_timer:
+    mov esi, title_timer
+    call ui_draw_stub
+    jmp .flush_frame
+
+.render_habits:
+    mov esi, title_habits
+    call ui_draw_stub
+    jmp .flush_frame
+
+.render_journal:
+    mov esi, title_journal
+    call ui_draw_stub
+    jmp .flush_frame
+
+.flush_frame:
+    ; Flush aggregated frame buffer with a SINGLE sys_write (FR-U4)
     call buf_flush
+    mov dword [need_redraw], 0
 
     ; -------------------------------------------------------------------------
-    ; 5. Sleep test: call time_sleep_100ms ten times in a loop
+    ; Step 3: Wait for Keystroke (Low CPU sleep loop via key_wait)
     ; -------------------------------------------------------------------------
-    mov ecx, SLEEP_DEMO_COUNT
-.sleep_loop:
-    push ecx
-    call time_sleep_100ms
-    pop ecx
-    dec ecx
-    jnz .sleep_loop
+.wait_for_input:
+    call key_wait               ; Blocks sleeping 50 ms per check; returns uppercase key in EAX
 
-    ; Print completion message and flush
-    mov esi, demo_lbl_sleep
-    call buf_str
-    call buf_flush
+    ; Dispatch key processing by current state
+    mov edx, [state]
 
-    ; -------------------------------------------------------------------------
-    ; Exit process cleanly with code 0
-    ; -------------------------------------------------------------------------
+    cmp edx, STATE_MENU
+    je .handle_menu_key
+
+    cmp edx, STATE_TIMER
+    je .handle_stub_key
+
+    cmp edx, STATE_HABITS
+    je .handle_stub_key
+
+    cmp edx, STATE_JOURNAL
+    je .handle_stub_key
+
+    cmp edx, STATE_QUIT
+    je .handle_exit
+
+    jmp .main_loop
+
+; -----------------------------------------------------------------------------
+; State Handler: STATE_MENU Keys (FR-U2)
+; -----------------------------------------------------------------------------
+.handle_menu_key:
+    ; Global exit: 'Q' or Ctrl+C
+    cmp eax, KEY_Q
+    je .handle_exit
+    cmp eax, KEY_CTRL_C
+    je .handle_exit
+
+    ; '1' -> Enter Pomodoro Timer stub screen
+    cmp eax, KEY_1
+    je .menu_to_timer
+
+    ; '2' -> Enter Habit Tracker stub screen
+    cmp eax, KEY_2
+    je .menu_to_habits
+
+    ; '3' -> Enter Journal stub screen
+    cmp eax, KEY_3
+    je .menu_to_journal
+
+    ; '4' -> Toggle demo mode (0 <-> 1)
+    cmp eax, KEY_4
+    je .menu_toggle_demo
+
+    ; Any other key is ignored: no redraw, no write!
+    jmp .main_loop
+
+.menu_to_timer:
+    mov dword [state], STATE_TIMER
+    mov dword [need_redraw], 1
+    jmp .main_loop
+
+.menu_to_habits:
+    mov dword [state], STATE_HABITS
+    mov dword [need_redraw], 1
+    jmp .main_loop
+
+.menu_to_journal:
+    mov dword [state], STATE_JOURNAL
+    mov dword [need_redraw], 1
+    jmp .main_loop
+
+.menu_toggle_demo:
+    xor dword [demo_mode], 1    ; Flip demo_mode between 0 and 1
+    mov dword [need_redraw], 1
+    jmp .main_loop
+
+; -----------------------------------------------------------------------------
+; State Handler: Stub Screens (Timer, Habits, Journal) Keys
+; -----------------------------------------------------------------------------
+.handle_stub_key:
+    ; Global exit: Ctrl+C (FR-U5 clean exit on every screen)
+    cmp eax, KEY_CTRL_C
+    je .handle_exit
+
+    ; 'B' (or 'b', uppercased by key_wait) -> Return to Main Menu
+    cmp eax, KEY_B
+    je .stub_to_menu
+
+    ; Any other key is ignored: no redraw, no write!
+    jmp .main_loop
+
+.stub_to_menu:
+    mov dword [state], STATE_MENU
+    mov dword [need_redraw], 1
+    jmp .main_loop
+
+; -----------------------------------------------------------------------------
+; State Handler: STATE_QUIT & Cleanup (FR-U5)
+; -----------------------------------------------------------------------------
+.handle_exit:
+    ; Guaranteed terminal restoration before exit
+    call term_restore
     syscall SYS_EXIT, EXIT_SUCCESS
 
 ; =============================================================================

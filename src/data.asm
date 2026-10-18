@@ -95,3 +95,64 @@ section .bss
 ; =============================================================================
     date_buf:               resb DATE_BUF_SIZE          ; 11 bytes: "YYYY-MM-DD\0"
     time_buf:               resb TIME_BUF_SIZE          ; 6 bytes: "HH:MM\0"
+
+; =============================================================================
+; Task 4 Shell & UI Data Assets (PRD §4.1, §5, §6.4)
+; =============================================================================
+section .data
+
+    ; ANSI Sequence: Erase from cursor to end of screen (PRD §3.3)
+    ansi_erase_eos:         db CHAR_ESC, "[J", CHAR_NULL        ; Erase from cursor to end of screen
+
+    ; Cat ASCII Art Poses (PRD §6.4, 3 lines per pose, <= 11 columns wide)
+    ; Pose 0: Idle cat (Main Menu)
+    cat_p0_l1:              db " /\_/\ ", CHAR_NULL
+    cat_p0_l2:              db "( o.o )", CHAR_NULL
+    cat_p0_l3:              db " > ^ < ", CHAR_NULL
+
+    ; Pose 1: Working cat with focused/closed eyes (Pomodoro focus)
+    cat_p1_l1:              db " /\_/\ ", CHAR_NULL
+    cat_p1_l2:              db "( -.- )", CHAR_NULL
+    cat_p1_l3:              db " > ^ < ", CHAR_NULL
+
+    ; Pose 2: Resting/sleeping cat (Pomodoro break)
+    cat_p2_l1:              db " /\_/\   z", CHAR_NULL
+    cat_p2_l2:              db "( u.u )  Z", CHAR_NULL
+    cat_p2_l3:              db " > ^ < ", CHAR_NULL
+
+    ; Main Menu UI Strings (PRD §5)
+    menu_title:             db "P A W M O D O R O", CHAR_NULL
+    menu_tagline:           db "cozy focus - habits - notes", CHAR_NULL
+    dash_lbl_today:         db "Today: ", CHAR_NULL
+    dash_lbl_pomos:         db " pomodoros      Habits: ", CHAR_NULL
+    dash_lbl_done:          db " done", CHAR_NULL
+
+    menu_item_1:            db "[1] Start focus session", CHAR_NULL
+    menu_item_2:            db "[2] Habit tracker", CHAR_NULL
+    menu_item_3:            db "[3] Journal", CHAR_NULL
+    menu_item_4_prefix:     db "[4] Demo mode: ", CHAR_NULL
+    menu_demo_off:          db "OFF", CHAR_NULL
+    menu_demo_on:           db "ON", CHAR_NULL
+    menu_item_q:            db "[Q] Quit", CHAR_NULL
+
+    ; Stub Screen Titles & Content (PRD §5)
+    title_timer:            db "FOCUS TIMER", CHAR_NULL
+    title_habits:           db "HABIT TRACKER", CHAR_NULL
+    title_journal:          db "JOURNAL", CHAR_NULL
+    stub_msg:               db "Coming soon — press B to go back", CHAR_NULL
+    stub_key_help:          db "[B] Back", CHAR_NULL
+
+    ; Dashboard summary statistics placeholders (T6/T7 will replace with real data)
+    dash_pomodoros:         dd 3
+    dash_habits_done:       dd 2
+    dash_habits_total:      dd 4
+
+section .bss
+
+    ; Cat ASCII art position coordinates (implicit inputs to ui_draw_cat)
+    cat_row:                resd 1                      ; Row coordinate (1-based)
+    cat_col:                resd 1                      ; Column coordinate (1-based)
+
+    ; Screen redraw tracking flag (1 = redraw needed, 0 = clean)
+    need_redraw:            resd 1                      ; Redraw dirty flag
+
