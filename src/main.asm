@@ -89,11 +89,20 @@ _start:
     call buf_flush
     mov dword [need_redraw], 0
 
-    ; -------------------------------------------------------------------------
-    ; Step 3: Wait for Keystroke (Low CPU sleep loop via key_wait)
-    ; -------------------------------------------------------------------------
 .wait_for_input:
-    call key_wait               ; Blocks sleeping 50 ms per check; returns uppercase key in EAX
+    ; Low-CPU sleep loop checking terminal dimensions and polling input (FR-U1, FR-T5)
+    call time_sleep_100ms
+    call term_size_ok
+    test eax, eax
+    jnz .poll_input
+    ; Terminal shrunk below 80x24: trigger redraw to enter ui_size_gate immediately
+    mov dword [need_redraw], 1
+    jmp .main_loop
+
+.poll_input:
+    call key_poll
+    cmp eax, KEY_NONE
+    je .wait_for_input
 
     ; Dispatch key processing by current state
     mov edx, [state]
