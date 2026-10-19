@@ -355,3 +355,41 @@ UI_HAB_COL_TOTAL        equ 50          ; Total check-in count column
 UI_HAB_COL_MSG          equ 4           ; Message text column
 UI_HAB_COL_HELP         equ 4           ; Key help text column
 
+; =============================================================================
+; Task 8 Additions: Journal Subsystem Constants (PRD §3.1, §4.4, §5, §6.4)
+; =============================================================================
+; Reposition read/write file offset syscall and seek whence flags (PRD §3.1)
+SYS_LSEEK               equ 19          ; Linux sys_lseek system call number
+SEEK_SET                equ 0           ; Seek relative to beginning of file
+SEEK_END                equ 2           ; Seek relative to end of file
+
+; Journal Line Format Constants
+JOURNAL_DATE_LEN        equ 10          ; Length of "YYYY-MM-DD" date string (10 bytes)
+JOURNAL_TIME_LEN        equ 5           ; Length of "HH:MM" time string (5 bytes)
+JOURNAL_SEP_LEN         equ 3           ; Length of " | " separator string (3 bytes)
+JOURNAL_PREFIX_LEN      equ 19          ; Prefix: date(10) + space(1) + time(5) + sep(3) = 19
+JOURNAL_MAX_LINE        equ 220         ; Prefix(19) + Max Entry(200) + LF(1) = 220 bytes
+JOURNAL_DISPLAY_WIDTH   equ 52          ; Max characters displayed per journal row (52 cols)
+
+; Journal Screen Row Coordinates (56-column frame)
+UI_JRN_ROW_TOP          equ 1           ; Top border row
+UI_JRN_ROW_TITLE        equ 2           ; Title row ("JOURNAL")
+UI_JRN_ROW_SEP          equ 3           ; Separator border row
+UI_JRN_ROW_FIRST        equ 4           ; First entry row (Row 4)
+UI_JRN_ROW_LAST         equ 13          ; Last entry row (Row 13, max 10 entries)
+UI_JRN_ROW_BLANK        equ 14          ; Blank spacing row
+UI_JRN_ROW_MSG          equ 15          ; User prompt / feedback message row
+UI_JRN_ROW_HELP         equ 16          ; Key help prompt row
+UI_JRN_ROW_BOTTOM       equ 17          ; Bottom border row
+UI_JRN_ROW_BELOW        equ 18          ; Row below frame for erase_eos (ESC[J)
+
+; Journal Screen Column Coordinates
+UI_JRN_COL_TITLE        equ 4           ; Title start column
+UI_JRN_COL_TEXT         equ 4           ; Entry text column
+UI_JRN_COL_MSG          equ 4           ; Message text column
+UI_JRN_COL_HELP         equ 4           ; Key help text column
+
+; Keyboard Input Constants (Task 8 Additions)
+KEY_N                   equ 78          ; ASCII uppercase 'N' (New entry)
+KEY_V                   equ 86          ; ASCII uppercase 'V' (View recent)
+

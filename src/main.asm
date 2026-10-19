@@ -26,6 +26,7 @@ section .text
 %include "src/stats.asm"
 %include "src/timer.asm"
 %include "src/habits.asm"
+%include "src/journal.asm"
 
     global _start
 
@@ -67,9 +68,6 @@ _start:
     cmp eax, STATE_MENU
     je .render_menu
 
-    cmp eax, STATE_JOURNAL
-    je .render_journal
-
     cmp eax, STATE_QUIT
     je .handle_exit
 
@@ -79,11 +77,6 @@ _start:
 
 .render_menu:
     call ui_draw_menu
-    jmp .flush_frame
-
-.render_journal:
-    mov esi, title_journal
-    call ui_draw_stub
     jmp .flush_frame
 
 .flush_frame:
@@ -102,9 +95,6 @@ _start:
 
     cmp edx, STATE_MENU
     je .handle_menu_key
-
-    cmp edx, STATE_JOURNAL
-    je .handle_stub_key
 
     cmp edx, STATE_QUIT
     je .handle_exit
@@ -157,7 +147,10 @@ _start:
     jmp .main_loop
 
 .menu_to_journal:
-    mov dword [state], STATE_JOURNAL
+    call journal_run
+    cmp dword [state], STATE_QUIT
+    je .handle_exit
+    mov dword [state], STATE_MENU
     mov dword [need_redraw], 1
     jmp .main_loop
 

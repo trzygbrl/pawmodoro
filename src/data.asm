@@ -270,3 +270,39 @@ section .bss
     ; Runtime UI message pointer (0 = none, or pointer to NUL-terminated ASCII string)
     habit_msg:                  resd 1
 
+; =============================================================================
+; Task 8 Journal Subsystem Data & Buffers (PRD §4.4, §4.5 FR-D1, FR-D4, §5)
+; =============================================================================
+section .data
+
+    ; File Paths (relative to current working directory)
+    path_journal:               db "journal.txt", CHAR_NULL
+
+    ; UI Strings & Help Prompts
+    jrnl_help:                  db "[N] New entry   [V] View recent   [B] Back", CHAR_NULL
+    jrnl_msg_initial_hint:      db "Press V to view recent entries.", CHAR_NULL
+    jrnl_msg_empty:             db "No entries yet.", CHAR_NULL
+    jrnl_msg_new_prompt:        db "New entry (max 200, Enter alone cancels): ", CHAR_NULL
+    jrnl_msg_saved:             db "Entry saved", CHAR_NULL
+    jrnl_sep:                   db " | ", CHAR_NULL
+
+section .bss
+
+    ; Runtime UI message pointer (0 = none, or pointer to NUL-terminated ASCII string)
+    jrnl_msg:                   resd 1
+
+    ; View state tracking (0 = unviewed/initial hint, 1 = recent entries loaded)
+    jrnl_view_active:           resd 1
+
+    ; Number of bytes loaded into jrnl_buf during last tail read
+    jrnl_bytes_loaded:          resd 1
+
+    ; Whether the loaded tail began in the middle of a file (file size > 4096)
+    jrnl_tail_partial:          resd 1
+
+    ; Number of complete lines found in recent view (0..JOURNAL_VIEW_LINES)
+    jrnl_line_count:            resd 1
+
+    ; Table of up to 10 (start_ptr, length) pairs for recent entries (10 * 8 = 80 bytes)
+    jrnl_lines:                 resd (JOURNAL_VIEW_LINES * 2)
+
