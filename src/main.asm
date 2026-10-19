@@ -30,24 +30,23 @@ section .text
 
     global _start
 
-; -----------------------------------------------------------------------------
-; _start: Program entry point and shell finite state machine.
-;
-; Purpose:  Initializes terminal raw mode, configures initial application state
-;           (STATE_MENU), enters the non-blocking event loop, dispatches renderers
-;           on need_redraw, sleeps 50 ms via key_wait when idle, and ensures
-;           term_restore is executed on all exit paths.
-; IN:       none
-; OUT:      none (process exits with status 0 via sys_exit)
-; CLOBBERS: EAX, EBX, ECX, EDX, ESI, EDI (irrelevant after process exit)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: _start
+; Purpose:   Top-level application shell entry point and finite state machine.
+;            Initializes terminal raw mode, loads persistent data stores,
+;            manages the 10 Hz non-blocking event and redraw loop, dispatches
+;            subsystem runners, and guarantees clean terminal restoration.
+; IN:        None
+; OUT:       None (process terminates via sys_exit with status code in EBX)
+; CLOBBERS:  EAX, EBX, ECX, EDX, ESI, EDI (registers discarded on process exit)
+;=============================================================================
 _start:
     ; -------------------------------------------------------------------------
     ; Step 1: Terminal Initialization & State Setup (FR-U1, FR-U5)
     ; -------------------------------------------------------------------------
-    call term_init
+    call term_init              ; Query terminal attributes and switch to alternate screen
     call term_install_signals   ; Install SIGHUP, SIGINT, SIGTERM signal handlers (Task 9)
-    call term_raw
+    call term_raw               ; Configure non-canonical, non-blocking raw mode
     call stats_load             ; Load persisted stats.dat into memory & sync dashboard (FR-U7, FR-D2)
     call habits_load            ; Load persisted habits.dat into memory & sync dashboard (FR-U7, FR-D3)
     call dashboard_refresh      ; Initialize live dashboard values in memory (Task 9)
@@ -211,18 +210,14 @@ _start:
     mov ebx, EXIT_SUCCESS
     call app_exit
 
-; -----------------------------------------------------------------------------
-; dashboard_refresh: Update dashboard statistics from in-memory stores.
-;
-; Purpose:  Reloads live daily statistics into dashboard display variables:
-;           1. Queries stats_today to update dash_pomodoros with today's count.
-;           2. Invokes habits_sync_dashboard to refresh dash_habits_done and
-;              dash_habits_total.
-;           Does not perform file I/O; reads current in-memory write-through data.
-; IN:       none
-; OUT:      Updates [dash_pomodoros], [dash_habits_done], [dash_habits_total]
-; CLOBBERS: EFLAGS only
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: dashboard_refresh
+; Purpose:   Update dashboard statistics from in-memory stores by querying
+;            stats_today and habits_sync_dashboard.
+; IN:        None
+; OUT:       Updates [dash_pomodoros], [dash_habits_done], [dash_habits_total]
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 dashboard_refresh:
     save_regs
 
@@ -234,16 +229,16 @@ dashboard_refresh:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; app_exit: Centralized process exit routine with guaranteed terminal cleanup.
-;
-; Purpose:  Sets the exiting flag [app_exiting] = 1 to prevent recursive exit calls
-;           from buf_flush, invokes term_restore to return the terminal to original
-;           cooked mode, and terminates the process via sys_exit with code in EBX.
-; IN:       EBX = Process exit code
-; OUT:      Never returns
-; CLOBBERS: n/a
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: app_exit
+; Purpose:   Centralized process exit routine with guaranteed terminal cleanup.
+;            Sets recursion guard [app_exiting] = 1, invokes term_restore to
+;            return the terminal to original cooked mode, and terminates the
+;            process via sys_exit with code in EBX.
+; IN:        EBX = Process exit code (0 = success, 1 = failure, 130 = signaled)
+; OUT:       None (never returns)
+; CLOBBERS:  None (process terminates)
+;=============================================================================
 app_exit:
     mov dword [app_exiting], 1  ; Prevent re-entrant exit during term_restore
     push ebx                    ; Preserve exit code across term_restore

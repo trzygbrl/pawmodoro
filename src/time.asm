@@ -11,16 +11,15 @@
 ; TEXT SECTION ROUTINES (section .text opened in src/main.asm)
 ; =============================================================================
 
-; -----------------------------------------------------------------------------
-; time_sleep_100ms: Sleep for 100 milliseconds using sys_nanosleep.
-;
-; Purpose:  Configures the shared timespec buffer with tv_sec = 0 and
-;           tv_nsec = 100,000,000 (NANOSLEEP_100MS), then calls sys_nanosleep.
-;           Interrupted sleeps (EINTR) are considered acceptable per PRD §6.4.
-; IN:       none
-; OUT:      none
-; CLOBBERS: none (EFLAGS only)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: time_sleep_100ms
+; Purpose:   Configures the shared timespec buffer with tv_sec = 0 and
+;            tv_nsec = 100,000,000 (NANOSLEEP_100MS), then calls sys_nanosleep.
+;            Interrupted sleeps (EINTR) are considered acceptable per PRD §6.4.
+; IN:        None
+; OUT:       None (sleeps for 100 ms via sys_nanosleep)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 time_sleep_100ms:
     save_regs
     push eax
@@ -36,14 +35,13 @@ time_sleep_100ms:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; time_now: Get current UTC timestamp in seconds since Unix epoch.
-;
-; Purpose:  Calls Linux sys_time with tloc = NULL and returns seconds in EAX.
-; IN:       none
-; OUT:      EAX = UTC seconds since 1970-01-01 00:00:00 UTC
-; CLOBBERS: EAX, EFLAGS
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: time_now
+; Purpose:   Calls Linux sys_time with tloc = NULL and returns seconds in EAX.
+; IN:        None
+; OUT:       EAX = Current UTC epoch timestamp in seconds
+; CLOBBERS:  EAX
+;=============================================================================
 time_now:
     save_regs
 
@@ -53,15 +51,14 @@ time_now:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; time_local: Get current local time in seconds adjusted for timezone.
-;
-; Purpose:  Calls time_now to query UTC timestamp, then adds TZ_OFFSET (28,800
-;           seconds for UTC+8, Philippines) to compute local seconds.
-; IN:       none
-; OUT:      EAX = Local seconds (UTC + TZ_OFFSET)
-; CLOBBERS: EAX, EFLAGS
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: time_local
+; Purpose:   Calls time_now to query UTC timestamp, then adds TZ_OFFSET (28,800
+;            seconds for UTC+8, Philippines) to compute local seconds.
+; IN:        None
+; OUT:       EAX = Local epoch timestamp in seconds (UTC + TZ_OFFSET)
+; CLOBBERS:  EAX
+;=============================================================================
 time_local:
     save_regs
 
@@ -71,16 +68,15 @@ time_local:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; time_today: Compute the current local day number since the Unix epoch.
-;
-; Purpose:  Calls time_local to get total local seconds, then performs an
-;           unsigned integer division by 86,400 (SECONDS_PER_DAY) to obtain the
-;           day count since 1970-01-01. Used for daily habit roll-overs.
-; IN:       none
-; OUT:      EAX = Day number (local seconds / 86400)
-; CLOBBERS: EAX, EFLAGS
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: time_today
+; Purpose:   Calls time_local to get total local seconds, then performs an
+;            unsigned integer division by 86,400 (SECONDS_PER_DAY) to obtain the
+;            day count since 1970-01-01. Used for daily habit roll-overs.
+; IN:        None
+; OUT:       EAX = Integer day number since Unix epoch (local / 86400)
+; CLOBBERS:  EAX
+;=============================================================================
 time_today:
     save_regs
 
@@ -94,28 +90,26 @@ time_today:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; time_fmt_date: Convert day number to calendar date string "YYYY-MM-DD\0".
-;
-; Purpose:  Transforms day count since 1970-01-01 into a human-readable Gregorian
-;           calendar date string formatted as "YYYY-MM-DD" with a terminating NUL
-;           directly into buffer EDI (requiring at least 11 bytes).
-;           Implements Howard Hinnant's "civil_from_days" integer algorithm:
-;             1. Shift epoch to March 1, year 0 (z = days + 719468).
-;             2. era = z / 146097, doe = z % 146097 (400-year cycle).
-;             3. yoe = (doe - doe/1460 + doe/36524 - doe/146096) / 365.
-;             4. y = yoe + era * 400.
-;             5. doy = doe - (365 * yoe + yoe/4 - yoe/100).
-;             6. mp = (5 * doy + 2) / 153.
-;             7. d = doy - (153 * mp + 2) / 5 + 1.
-;             8. m = mp < 10 ? mp + 3 : mp - 9.
-;             9. if m <= 2 then y += 1.
-;           Writes characters directly to memory without calling buf_* routines.
-; IN:       EAX = Day number (non-negative)
-;           EDI = Destination buffer pointer (>= 11 bytes)
-; OUT:      writes "YYYY-MM-DD\0" at [EDI]
-; CLOBBERS: none (EFLAGS only; EAX and EDI are preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: time_fmt_date
+; Purpose:   Transforms day count since 1970-01-01 into a human-readable Gregorian
+;            calendar date string formatted as "YYYY-MM-DD" with a terminating NUL
+;            directly into buffer EDI (requiring at least 11 bytes).
+;            Implements Howard Hinnant's "civil_from_days" integer algorithm:
+;              1. Shift epoch to March 1, year 0 (z = days + 719468).
+;              2. era = z / 146097, doe = z % 146097 (400-year cycle).
+;              3. yoe = (doe - doe/1460 + doe/36524 - doe/146096) / 365.
+;              4. y = yoe + era * 400.
+;              5. doy = doe - (365 * yoe + yoe/4 - yoe/100).
+;              6. mp = (5 * doy + 2) / 153.
+;              7. d = doy - (153 * mp + 2) / 5 + 1.
+;              8. m = mp < 10 ? mp + 3 : mp - 9.
+;              9. if m <= 2 then y += 1.
+;            Writes characters directly to memory without calling buf_* routines.
+; IN:        EAX = Day number, EDI = Buffer pointer (>= 11 bytes)
+; OUT:       Formats calendar date YYYY-MM-DD\0 in [EDI]
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 time_fmt_date:
     save_regs
     push eax                    ; Preserve input day number
@@ -341,16 +335,14 @@ time_fmt_date:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; time_fmt_hhmm: Format local seconds into "HH:MM\0" (6 bytes).
-;
-; Purpose:  Converts local seconds since epoch into 24-hour time of day "HH:MM\0"
-;           written directly to [EDI]. Hours and minutes are zero-padded.
-; IN:       EAX = Local seconds
-;           EDI = Destination buffer pointer (>= 6 bytes)
-; OUT:      writes "HH:MM\0" at [EDI]
-; CLOBBERS: none (EFLAGS only; EAX and EDI are preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: time_fmt_hhmm
+; Purpose:   Converts local seconds since epoch into 24-hour time of day "HH:MM\0"
+;            written directly to [EDI]. Hours and minutes are zero-padded.
+; IN:        EAX = Local seconds, EDI = Buffer pointer (>= 6 bytes)
+; OUT:       Formats time HH:MM\0 in [EDI]
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 time_fmt_hhmm:
     save_regs
     push eax

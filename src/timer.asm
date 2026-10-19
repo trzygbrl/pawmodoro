@@ -11,30 +11,28 @@
 ; TEXT SECTION ROUTINES (section .text opened in src/main.asm)
 ; =============================================================================
 
-; -----------------------------------------------------------------------------
-; -----------------------------------------------------------------------------
-; timer_draw: Render the Pomodoro Timer frame into out_buf.
-;
-; Purpose:  Assembles the entire Pomodoro Timer frame in out_buf adhering to the
-;           PRD §5 wireframe. Implements the two-phase rendering model:
-;           Phase 1: Moves cursor to (1,1), draws borders and cleared rows
-;                    (Rows 1..10), and clears lines below frame with ESC[J.
-;           Phase 2: Overlays title ("<PHASE> - Session n of 4"), demo tag
-;                    ("[DEMO]"), cat ASCII art (working/resting pose), time display
-;                    (MM:SS with "PAUSED" indicator if paused), 30-char progress
-;                    bar via ui_progress_bar, phase message / prompt on Row 8,
-;                    and context-sensitive key help on Row 9.
-;           NOTE: Does NOT flush the buffer. Caller invokes buf_flush (or appends
-;                 the audio bell before flushing).
-; IN:       EAX = Frame completion / prompt mode:
-;                 TIMER_FRAME_RUNNING (0): Normal active/paused frame
-;                 TIMER_FRAME_BREAK_DONE (1): Break over message & help
-;                 TIMER_FRAME_FOCUS_DONE (2): Focus complete note prompt & help
-;                 TIMER_FRAME_NOTE_PROMPT (3): Note input prompt (row 8)
-;                 TIMER_FRAME_NOTE_RESULT (4): Note result status (timer_result_msg)
-; OUT:      Appends entire frame escape sequences and text to out_buf
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: timer_draw
+; Purpose:   Assembles the entire Pomodoro Timer frame in out_buf adhering to the
+;            PRD §5 wireframe. Implements the two-phase rendering model:
+;            Phase 1: Moves cursor to (1,1), draws borders and cleared rows
+;                     (Rows 1..10), and clears lines below frame with ESC[J.
+;            Phase 2: Overlays title ("<PHASE> - Session n of 4"), demo tag
+;                     ("[DEMO]"), cat ASCII art (working/resting pose), time display
+;                     (MM:SS with "PAUSED" indicator if paused), 30-char progress
+;                     bar via ui_progress_bar, phase message / prompt on Row 8,
+;                     and context-sensitive key help on Row 9.
+;            NOTE: Does NOT flush the buffer. Caller invokes buf_flush (or appends
+;                  the audio bell before flushing).
+; IN:        EAX = Frame completion / prompt mode:
+;                  TIMER_FRAME_RUNNING (0): Normal active/paused frame
+;                  TIMER_FRAME_BREAK_DONE (1): Break over message & help
+;                  TIMER_FRAME_FOCUS_DONE (2): Focus complete note prompt & help
+;                  TIMER_FRAME_NOTE_PROMPT (3): Note input prompt (row 8)
+;                  TIMER_FRAME_NOTE_RESULT (4): Note result status (timer_result_msg)
+; OUT:       Appends entire frame escape sequences and text to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 timer_draw:
     call ui_size_gate           ; Terminal dimension check gate (Task 9)
     save_regs
@@ -315,17 +313,16 @@ timer_draw:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; timer_phase_start: Initialize and render the start of a timer phase.
-;
-; Purpose:  Sets up total duration from normal/demo tables based on [demo_mode],
-;           initializes remaining_secs = total_secs, ticks = 0, paused = 0,
-;           and resets focus_completed_flag = 0 if entering PHASE_FOCUS.
-;           Renders the initial frame (0% elapsed) and flushes out_buf once.
-; IN:       none
-; OUT:      none
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: timer_phase_start
+; Purpose:   Sets up total duration from normal/demo tables based on [demo_mode],
+;            initializes remaining_secs = total_secs, ticks = 0, paused = 0,
+;            and resets focus_completed_flag = 0 if entering PHASE_FOCUS.
+;            Renders the initial frame (0% elapsed) and flushes out_buf once.
+; IN:        None
+; OUT:       None
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 timer_phase_start:
     save_regs
     push eax
@@ -362,26 +359,25 @@ timer_phase_start:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; timer_advance_phase: Transition to next phase after natural phase completion.
-;
-; Purpose:  Implements standard Pomodoro cycle progression:
-;           - After completed FOCUS:
-;             If session_no == SESSIONS_PER_CYCLE (4):
-;               next phase is PHASE_LONG_BREAK.
-;             Else:
-;               next phase is PHASE_SHORT_BREAK.
-;           - After break (SHORT_BREAK or LONG_BREAK):
-;             next phase is PHASE_FOCUS.
-;             If focus_completed_flag == 1:
-;               If current phase was LONG_BREAK:
-;                 session_no resets to 1.
-;               Else:
-;                 session_no increments.
-; IN:       none
-; OUT:      Updates [phase] and [session_no]
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: timer_advance_phase
+; Purpose:   Implements standard Pomodoro cycle progression:
+;            - After completed FOCUS:
+;              If session_no == SESSIONS_PER_CYCLE (4):
+;                next phase is PHASE_LONG_BREAK.
+;              Else:
+;                next phase is PHASE_SHORT_BREAK.
+;            - After break (SHORT_BREAK or LONG_BREAK):
+;              next phase is PHASE_FOCUS.
+;              If focus_completed_flag == 1:
+;                If current phase was LONG_BREAK:
+;                  session_no resets to 1.
+;                Else:
+;                  session_no increments.
+; IN:        None
+; OUT:       Updates [phase] and [session_no]
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 timer_advance_phase:
     save_regs
     push eax
@@ -420,21 +416,20 @@ timer_advance_phase:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; timer_skip_phase: Transition to next phase when user skips with 'S'.
-;
-; Purpose:  Implements the Pomodoro skip rules:
-;           - A skipped FOCUS phase is NOT completed (focus_completed_flag
-;             remains 0) and transitions to PHASE_SHORT_BREAK without advancing
-;             session_no.
-;           - A skipped break transitions to PHASE_FOCUS. If the preceding
-;             focus was completed, session_no advances (or resets to 1 after
-;             LONG_BREAK); if the preceding focus was skipped, session_no
-;             does not change.
-; IN:       none
-; OUT:      Updates [phase] and [session_no]
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: timer_skip_phase
+; Purpose:   Implements the Pomodoro skip rules:
+;            - A skipped FOCUS phase is NOT completed (focus_completed_flag
+;              remains 0) and transitions to PHASE_SHORT_BREAK without advancing
+;              session_no.
+;            - A skipped break transitions to PHASE_FOCUS. If the preceding
+;              focus was completed, session_no advances (or resets to 1 after
+;              LONG_BREAK); if the preceding focus was skipped, session_no
+;              does not change.
+; IN:        None
+; OUT:       Updates [phase] and [session_no]
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 timer_skip_phase:
     save_regs
     push eax
@@ -468,24 +463,23 @@ timer_skip_phase:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; timer_run: Pomodoro Timer execution loop and event dispatcher.
-;
-; Purpose:  Initializes Pomodoro state (PHASE_FOCUS, session 1), starts the first
-;           phase, and enters the non-blocking 100ms timing loop.
-;           Polls keys each tick, handles P (pause toggle), S (skip phase),
-;           Q (stop and return to menu), and Ctrl+C (quit application).
-;           When running, decrements remaining_secs every 10 ticks (1 second) and
-;           redraws the frame once per second.
-;           When a phase naturally completes (remaining_secs reaches 0), renders
-;           the completion frame with audio bell in a single sys_write, waits for
-;           user keypress, and transitions to the next phase in the Pomodoro cycle.
-;           Before returning, sets [state] to STATE_MENU (on Q/stop) or STATE_QUIT
-;           (on Ctrl+C).
-; IN:       none
-; OUT:      none
-; CLOBBERS: none (EFLAGS only)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: timer_run
+; Purpose:   Initializes Pomodoro state (PHASE_FOCUS, session 1), starts the first
+;            phase, and enters the non-blocking 100ms timing loop.
+;            Polls keys each tick, handles P (pause toggle), S (skip phase),
+;            Q (stop and return to menu), and Ctrl+C (quit application).
+;            When running, decrements remaining_secs every 10 ticks (1 second) and
+;            redraws the frame once per second.
+;            When a phase naturally completes (remaining_secs reaches 0), renders
+;            the completion frame with audio bell in a single sys_write, waits for
+;            user keypress, and transitions to the next phase in the Pomodoro cycle.
+;            Before returning, sets [state] to STATE_MENU (on Q/stop) or STATE_QUIT
+;            (on Ctrl+C).
+; IN:        None
+; OUT:       None (returns to menu on quit)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 timer_run:
     save_regs
     push eax

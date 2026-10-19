@@ -10,23 +10,22 @@
 ; TEXT SECTION ROUTINES (section .text opened in src/main.asm)
 ; =============================================================================
 
-; -----------------------------------------------------------------------------
-; ui_draw_cat: Render 3-line ASCII cat art in specified pose.
-;
-; Purpose:  Renders a 3-line ASCII cat (at most 11 columns wide) using absolute
-;           positioning at coordinates (cat_row, cat_col). Applies a cozy warm
-;           yellow color palette and always restores standard text styling.
-;           Out-of-range pose numbers default to pose 0 (idle).
-; IN:       EAX = Pose number:
-;                 0 = Idle cat (main menu)
-;                 1 = Working cat with focused eyes (timer focus)
-;                 2 = Resting / sleeping cat with "zZ" (timer break)
-;           Implicit inputs:
-;                 dword [cat_row] = 1-based top row coordinate
-;                 dword [cat_col] = 1-based left column coordinate
-; OUT:      Appends cat escape sequences and text to out_buf
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: ui_draw_cat
+; Purpose:   Renders a 3-line ASCII cat (at most 11 columns wide) using absolute
+;            positioning at coordinates (cat_row, cat_col). Applies a cozy warm
+;            yellow color palette and always restores standard text styling.
+;            Out-of-range pose numbers default to pose 0 (idle).
+; IN:        EAX = Pose number:
+;                  0 = Idle cat (main menu)
+;                  1 = Working cat with focused eyes (timer focus)
+;                  2 = Resting / sleeping cat with "zZ" (timer break)
+;            Implicit inputs:
+;                  dword [cat_row] = 1-based top row coordinate
+;                  dword [cat_col] = 1-based left column coordinate
+; OUT:       Appends ASCII cat art to output buffer
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 ui_draw_cat:
     save_regs
     push eax
@@ -92,15 +91,14 @@ ui_draw_cat:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; ui_frame_hline: Render a horizontal border line across the 56-column frame.
-;
-; Purpose:  Positions cursor at (row, 1) and appends '+' followed by 54 '-'
-;           characters and a trailing '+'. Total line width is exactly 56 cols.
-; IN:       EAX = Row coordinate (1-based)
-; OUT:      Appends horizontal frame line to out_buf
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: ui_frame_hline
+; Purpose:   Positions cursor at (row, 1) and appends '+' followed by 54 '-'
+;            characters and a trailing '+'. Total line width is exactly 56 cols.
+; IN:        EAX = Row coordinate (1-based)
+; OUT:       Appends horizontal frame line to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 ui_frame_hline:
     save_regs
     push eax
@@ -130,17 +128,16 @@ ui_frame_hline:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; ui_frame_row: Render an empty framed row with line clearing and right border.
-;
-; Purpose:  Positions cursor at (row, 1), writes left border '|', erases from
-;           cursor to end of line via ESC[K (obliterating any leftover text from
-;           previous screens), positions cursor at absolute column 56, and writes
-;           the right border '|'. Eliminates inner padding calculations.
-; IN:       EAX = Row coordinate (1-based)
-; OUT:      Appends cleared framed row to out_buf
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: ui_frame_row
+; Purpose:   Positions cursor at (row, 1), writes left border '|', erases from
+;            cursor to end of line via ESC[K (obliterating any leftover text from
+;            previous screens), positions cursor at absolute column 56, and writes
+;            the right border '|'. Eliminates inner padding calculations.
+; IN:        EAX = Row coordinate (1-based)
+; OUT:       Appends cleared framed row to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 ui_frame_row:
     save_regs
     push eax
@@ -170,17 +167,15 @@ ui_frame_row:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; ui_text_at: Position cursor and render a NUL-terminated string.
-;
-; Purpose:  Helper routine that positions cursor at (row, col) and appends
-;           the string at ESI to out_buf.
-; IN:       EAX = Row coordinate (1-based)
-;           EBX = Column coordinate (1-based)
-;           ESI = Pointer to NUL-terminated string
-; OUT:      Appends positioning and text to out_buf
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: ui_text_at
+; Purpose:   Helper routine that positions cursor at (row, col) and appends
+;            the string at ESI to out_buf.
+; IN:        EAX = Row coordinate (1-based), EBX = Column coordinate (1-based),
+;            ESI = Pointer to NUL-terminated string
+; OUT:       Appends positioning and text to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 ui_text_at:
     save_regs
     push eax
@@ -192,16 +187,15 @@ ui_text_at:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; ui_draw_menu: Render the complete Main Menu dashboard frame (PRD §5).
-;
-; Purpose:  Draws all outer borders and clears inner rows first, wipes remaining
-;           screen area below row 13 with ESC[J, then overlays cat art, bold
-;           titles, daily statistics dashboard, and menu options.
-; IN:       none (reads demo_mode, dash_pomodoros, dash_habits_done, dash_habits_total)
-; OUT:      Appends complete menu frame to out_buf
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: ui_draw_menu
+; Purpose:   Draws all outer borders and clears inner rows first, wipes remaining
+;            screen area below row 13 with ESC[J, then overlays cat art, bold
+;            titles, daily statistics dashboard, and menu options.
+; IN:        None (reads demo_mode, dash_pomodoros, dash_habits_done, dash_habits_total)
+; OUT:       Appends complete menu frame to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 ui_draw_menu:
     call ui_size_gate
     save_regs
@@ -410,16 +404,15 @@ ui_draw_menu:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; ui_draw_stub: Render a framed placeholder screen with a custom title.
-;
-; Purpose:  Draws a framed screen for unimplemented modules (Timer, Habits,
-;           Journal) with the given title and standard prompt:
-;           "Coming soon — press B to go back". Wipes remaining lines below row 8.
-; IN:       ESI = Pointer to NUL-terminated screen title string
-; OUT:      Appends framed stub screen to out_buf
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: ui_draw_stub
+; Purpose:   Draws a framed screen for placeholder screens (Timer, Habits,
+;            Journal) with the given title and standard prompt:
+;            "Coming soon — press B to go back". Wipes remaining lines below row 8.
+; IN:        ESI = Pointer to NUL-terminated screen title string
+; OUT:       Appends framed stub screen to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 ui_draw_stub:
     save_regs
     push eax
@@ -498,22 +491,19 @@ ui_draw_stub:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; ui_progress_bar: Append 30-character progress bar and percentage to out_buf.
-;
-; Purpose:  Calculates the proportion of elapsed time (EAX) against total phase
-;           duration (ECX) and formats a 30-character progress bar:
-;           '[' + filled '#' characters + empty '-' characters + ']' + "  " + percentage + '%'.
-;           The number of filled characters is (elapsed * 30) / total.
-;           The percentage is (elapsed * 100) / total.
-;           Arithmetic uses unsigned MUL and DIV, with EDX explicitly zeroed
-;           via 'xor edx, edx' before every DIV (never CDQ).
-;           Elapsed is clamped to total. If total is 0, progress is treated as 100%.
-; IN:       EAX = Elapsed time in seconds
-;           ECX = Total phase duration in seconds
-; OUT:      Appends progress bar text directly to out_buf
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: ui_progress_bar
+; Purpose:   Calculates proportion of elapsed time (EAX) against total duration (ECX)
+;            and formats a 30-character progress bar:
+;            '[' + filled '#' characters + empty '-' characters + ']' + "  " + percentage + '%'.
+;            The number of filled characters is (elapsed * 30) / total.
+;            The percentage is (elapsed * 100) / total.
+;            Arithmetic uses unsigned MUL and DIV, with EDX explicitly zeroed.
+;            Elapsed is clamped to total. If total is 0, progress is treated as 100%.
+; IN:        EAX = Elapsed time in seconds, ECX = Total phase duration in seconds
+; OUT:       Appends 30-char bar ([###---]) and percentage to buffer
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 ui_progress_bar:
     save_regs
     push eax
@@ -593,21 +583,20 @@ ui_progress_bar:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; ui_size_gate: Terminal dimension enforcement gate.
-;
-; Purpose:  Checks if terminal size is at least 80x24 via term_size_ok.
-;           If smaller than 80x24, loops displaying an enlarge warning:
-;             Row 1: "Please enlarge the terminal"
-;             Row 2: "(need 80x24, now <cols>x<rows>)"
-;           During loop, sleeps 100ms via time_sleep_100ms and polls for Ctrl+C.
-;           If Ctrl+C is pressed, calls app_exit(EXIT_SUCCESS).
-;           When dimensions recover to >= 80x24, appends ansi_clear to out_buf so
-;           subsequent screen redraw paints on a pristine screen, and returns.
-; IN:       none
-; OUT:      none
-; CLOBBERS: EFLAGS only (all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: ui_size_gate
+; Purpose:   Checks if terminal size is at least 80x24 via term_size_ok.
+;            If smaller than 80x24, loops displaying an enlarge warning:
+;              Row 1: "Please enlarge the terminal"
+;              Row 2: "(need 80x24, now <cols>x<rows>)"
+;            During loop, sleeps 100ms via time_sleep_100ms and polls for Ctrl+C.
+;            If Ctrl+C is pressed, calls app_exit(EXIT_SUCCESS).
+;            When dimensions recover to >= 80x24, appends ansi_clear to out_buf so
+;            subsequent screen redraw paints on a pristine screen, and returns.
+; IN:        None
+; OUT:       None (gates execution until dimensions >= 80x24 or unknown)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 ui_size_gate:
     save_regs
     push eax
@@ -692,22 +681,20 @@ ui_size_gate:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; ui_draw_status: Append styled status message at (row, col 4).
-;
-; Purpose:  Positions cursor at (EAX, 4) and emits string at ESI styled
-;           according to EBX:
-;             STATUS_INFO (0): ansi_fg_bright_yellow
-;             STATUS_OK (1):   ansi_bold + ansi_fg_bright_green
-;             STATUS_ERR (2):  ansi_bold + ansi_fg_bright_red
-;           If ESI is 0 (NULL), nothing is drawn.
-;           Always emits ansi_reset after message.
-; IN:       EAX = Row coordinate (1-based)
-;           EBX = Status style (STATUS_INFO, STATUS_OK, STATUS_ERR)
-;           ESI = Pointer to NUL-terminated message string (0 = none)
-; OUT:      none
-; CLOBBERS: EFLAGS only
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: ui_draw_status
+; Purpose:   Positions cursor at (EAX, 4) and emits string at ESI styled
+;            according to EBX:
+;              STATUS_INFO (0): ansi_fg_bright_yellow
+;              STATUS_OK (1):   ansi_bold + ansi_fg_bright_green
+;              STATUS_ERR (2):  ansi_bold + ansi_fg_bright_red
+;            If ESI is 0 (NULL), nothing is drawn.
+;            Always emits ansi_reset after message.
+; IN:        EAX = Row coordinate (1-based), EBX = Status style,
+;            ESI = Pointer to NUL-terminated message string (0 = none)
+; OUT:       None (appends styled status message to out_buf)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 ui_draw_status:
     save_regs
     push eax

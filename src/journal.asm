@@ -11,20 +11,18 @@
 ; TEXT SECTION ROUTINES (section .text opened in src/main.asm)
 ; =============================================================================
 
-; -----------------------------------------------------------------------------
-; journal_add: Append one timestamped text entry to journal.txt.
-;
-; Purpose:  Formats a new journal entry: "YYYY-MM-DD HH:MM | <text>\n" in file_buf
-;           and appends it to journal.txt via file_append per PRD §4.4 (FR-J2, FR-J3).
-;           Calls time_local ONCE and derives the day number from that value by
-;           unsigned division by SECONDS_PER_DAY (ensuring date and time cannot
-;           disagree around midnight). Replaces any byte < 0x20 or == 0x7F with
-;           '?' to prevent multi-line injection. Clamps text to JOURNAL_ENTRY_MAX
-;           (200 characters). Returns FILE_ERR (-1) if text is empty (length 0).
-; IN:       ESI = Pointer to NUL-terminated text string
-; OUT:      EAX = 0 (FILE_OK) on success, -1 (FILE_ERR) on error/empty
-; CLOBBERS: EAX, EFLAGS only (all other registers, including ESI/EDI, preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: journal_add
+; Purpose:   Formats a new journal entry: "YYYY-MM-DD HH:MM | <text>\n" in file_buf
+;            and appends it to journal.txt via file_append per PRD §4.4 (FR-J2, FR-J3).
+;            Calls time_local ONCE and derives day number by unsigned division
+;            by SECONDS_PER_DAY. Sanitizes non-printable characters (< 0x20 or == 0x7F)
+;            to '?' to prevent multi-line injection. Clamps text to JOURNAL_ENTRY_MAX
+;            (200 characters). Returns FILE_ERR (-1) if text is empty (length 0).
+; IN:        ESI = Pointer to NUL-terminated text string
+; OUT:       EAX = 0 (FILE_OK) on success, -1 (FILE_ERR) on error/empty
+; CLOBBERS:  EAX
+;=============================================================================
 journal_add:
     save_regs
     push esi                    ; [esp] = caller's original text pointer
@@ -126,24 +124,23 @@ journal_add:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; journal_load_tail: Load up to the last 4096 bytes of journal.txt into jrnl_buf.
-;
-; Purpose:  Implements FR-J4 tail loading via raw Linux x86 system calls:
-;           1. sys_open(path_journal, O_RDONLY, 0)
-;           2. sys_lseek(fd, 0, SEEK_END) to obtain exact file size.
-;           3. If size > JRNL_BUF_SIZE (4096):
-;              sys_lseek(fd, size - 4096, SEEK_SET) and jrnl_tail_partial = 1.
-;              Otherwise:
-;              sys_lseek(fd, 0, SEEK_SET) and jrnl_tail_partial = 0.
-;           4. sys_read(fd, jrnl_buf, 4096) to load tail bytes.
-;           5. sys_close(fd) on EVERY path where open succeeded (no fd leaks).
-;           Stores loaded count in jrnl_bytes_loaded. Missing, empty, or unreadable
-;           files set jrnl_bytes_loaded = 0 safely without crashing (FR-D1).
-; IN:       none
-; OUT:      none
-; CLOBBERS: EFLAGS only (all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: journal_load_tail
+; Purpose:   Implements FR-J4 tail loading via raw Linux x86 system calls:
+;            1. sys_open(path_journal, O_RDONLY, 0)
+;            2. sys_lseek(fd, 0, SEEK_END) to obtain exact file size.
+;            3. If size > JRNL_BUF_SIZE (4096):
+;               sys_lseek(fd, size - 4096, SEEK_SET) and jrnl_tail_partial = 1.
+;               Otherwise:
+;               sys_lseek(fd, 0, SEEK_SET) and jrnl_tail_partial = 0.
+;            4. sys_read(fd, jrnl_buf, 4096) to load tail bytes.
+;            5. sys_close(fd) on EVERY path where open succeeded (no fd leaks).
+;            Stores loaded count in jrnl_bytes_loaded. Missing, empty, or unreadable
+;            files set jrnl_bytes_loaded = 0 safely without crashing (FR-D1).
+; IN:        None
+; OUT:       None (initializes [jrnl_bytes_loaded] and [jrnl_tail_partial])
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 journal_load_tail:
     save_regs
     push eax
@@ -223,22 +220,21 @@ journal_load_tail:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; journal_find_lines: Scan loaded buffer backwards to locate last 10 complete lines.
-;
-; Purpose:  Scans jrnl_buf[0..jrnl_bytes_loaded) backwards to record up to
-;           JOURNAL_VIEW_LINES (10) complete lines per PRD §4.4 (FR-J4).
-;           - If jrnl_tail_partial == 1, discards all bytes up to and including
-;             the first LF in jrnl_buf to prevent displaying a chopped line.
-;           - Skips trailing and intermediate empty lines.
-;           - If the file does not end with LF, treats buffer end as line end.
-;           - Stores lines in jrnl_lines as (start_ptr, length) pairs ordered
-;             oldest to newest, top to bottom.
-;           - Stores count of valid lines in jrnl_line_count (0..10).
-; IN:       none (reads jrnl_bytes_loaded, jrnl_tail_partial, jrnl_buf)
-; OUT:      none (writes jrnl_line_count, jrnl_lines)
-; CLOBBERS: EFLAGS only (all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: journal_find_lines
+; Purpose:   Scans jrnl_buf[0..jrnl_bytes_loaded) backwards to record up to
+;            JOURNAL_VIEW_LINES (10) complete lines per PRD §4.4 (FR-J4).
+;            - If jrnl_tail_partial == 1, discards all bytes up to and including
+;              the first LF in jrnl_buf to prevent displaying a chopped line.
+;            - Skips trailing and intermediate empty lines.
+;            - If the file does not end with LF, treats buffer end as line end.
+;            - Stores lines in jrnl_lines as (start_ptr, length) pairs ordered
+;              oldest to newest, top to bottom.
+;            - Stores count of valid lines in jrnl_line_count (0..10).
+; IN:        None (reads jrnl_bytes_loaded, jrnl_tail_partial, jrnl_buf)
+; OUT:       None (writes jrnl_line_count, jrnl_lines)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 journal_find_lines:
     save_regs
     push eax
@@ -368,21 +364,20 @@ journal_find_lines:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; journal_draw_row: Render a single journal entry line at specified row.
-;
-; Purpose:  Positions cursor at (EAX, UI_JRN_COL_TEXT = 4) and appends at most
-;           JOURNAL_DISPLAY_WIDTH (52) characters from [ESI] up to length ECX.
-;           Sanitizes non-printable characters (< 0x20 or == 0x7F) to '?' to
-;           prevent terminal escape sequence injection from corrupt files.
-;           Guarantees line does not exceed column 55, preserving the right border
-;           at column 56. Does not modify source buffer or file content.
-; IN:       EAX = Screen row coordinate (UI_JRN_ROW_FIRST + index)
-;           ESI = Pointer to line start in jrnl_buf
-;           ECX = Line length in bytes
-; OUT:      Appends formatted text to out_buf
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: journal_draw_row
+; Purpose:   Positions cursor at (EAX, UI_JRN_COL_TEXT = 4) and appends at most
+;            JOURNAL_DISPLAY_WIDTH (52) characters from [ESI] up to length ECX.
+;            Sanitizes non-printable characters (< 0x20 or == 0x7F) to '?' to
+;            prevent terminal escape sequence injection from corrupt files.
+;            Guarantees line does not exceed column 55, preserving the right border
+;            at column 56. Does not modify source buffer or file content.
+; IN:        EAX = Screen row coordinate (UI_JRN_ROW_FIRST + index),
+;            ESI = Pointer to line start in jrnl_buf,
+;            ECX = Line length in bytes
+; OUT:       Appends formatted text to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 journal_draw_row:
     save_regs
     push eax
@@ -424,20 +419,19 @@ journal_draw_row:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; journal_draw: Assemble the complete Journal screen frame into out_buf.
-;
-; Purpose:  Constructs the 56-column Journal screen in out_buf per PRD §5 wireframe.
-;           Implements the two-phase rendering pattern:
-;           Phase 1: Moves cursor to (1,1), draws borders and cleared rows
-;                    (Rows 1..17), and clears below the frame with ESC[J.
-;           Phase 2: Overlays title, separator, entry records (up to 10) or
-;                    hints/empty state, feedback message, and key help prompts.
-;           NOTE: Does NOT flush the buffer. Caller invokes buf_flush.
-; IN:       none
-; OUT:      Appends entire frame escape sequences and text to out_buf
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: journal_draw
+; Purpose:   Constructs the 56-column Journal screen in out_buf per PRD §5 wireframe.
+;            Implements the two-phase rendering pattern:
+;            Phase 1: Moves cursor to (1,1), draws borders and cleared rows
+;                     (Rows 1..17), and clears below the frame with ESC[J.
+;            Phase 2: Overlays title, separator, entry records (up to 10) or
+;                     hints/empty state, feedback message, and key help prompts.
+;            NOTE: Does NOT flush the buffer. Caller invokes buf_flush.
+; IN:        None
+; OUT:       Appends entire frame escape sequences and text to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 journal_draw:
     call ui_size_gate           ; Terminal dimension check gate (Task 9)
     save_regs
@@ -612,22 +606,21 @@ journal_draw:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; journal_new_entry: Interactive addition of a new journal entry (Key 'N').
-;
-; Purpose:  Implements FR-J1 line input and FR-J3 entry addition:
-;           1. Sets prompt on Row 15, draws frame, and flushes output buffer.
-;           2. Positions cursor directly after prompt (computed via str_len).
-;           3. Calls read_line with line_buf and capacity JOURNAL_ENTRY_MAX (200).
-;           4. Empty input cancels: writes nothing, clears prompt.
-;           5. Non-empty input calls journal_add:
-;              - On success: sets "Entry saved". If view is active, refreshes view.
-;              - On failure: sets "Could not save" (FR-D4).
-;           6. Always sets need_redraw = 1 to clean up cooked mode echo.
-; IN:       none
-; OUT:      none
-; CLOBBERS: EFLAGS only (all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: journal_new_entry
+; Purpose:   Interactive addition of a new journal entry (Key 'N'):
+;            1. Sets prompt on Row 15, draws frame, and flushes output buffer.
+;            2. Positions cursor directly after prompt (computed via str_len).
+;            3. Calls read_line with line_buf and capacity JOURNAL_ENTRY_MAX (200).
+;            4. Empty input cancels: writes nothing, clears prompt.
+;            5. Non-empty input calls journal_add:
+;               - On success: sets "Entry saved". If view is active, refreshes view.
+;               - On failure: sets "Could not save" (FR-D4).
+;            6. Always sets need_redraw = 1 to clean up cooked mode echo.
+; IN:        None
+; OUT:       None
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 journal_new_entry:
     save_regs
 
@@ -682,22 +675,21 @@ journal_new_entry:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; journal_run: Main modal loop for Journal screen (FR-J1).
-;
-; Purpose:  Runs the modal event loop for the Journal screen:
-;           - Renders frame on need_redraw dirty flag via journal_draw + buf_flush.
-;           - Blocks sleeping 50ms per poll via key_wait (near 0% idle CPU).
-;           - Dispatches interactive commands:
-;             * 'N' -> Add new journal entry
-;             * 'V' -> View recent 10 entries
-;             * 'B' -> Return to main menu (sets STATE_MENU and returns)
-;             * Ctrl+C -> Exit application (sets STATE_QUIT and returns)
-;           - Ignores unhandled keys without redrawing or triggering sys_write.
-; IN:       none
-; OUT:      none (sets [state] = STATE_MENU or STATE_QUIT)
-; CLOBBERS: EFLAGS only (all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: journal_run
+; Purpose:   Runs the modal event loop for the Journal screen (FR-J1):
+;            - Renders frame on need_redraw dirty flag via journal_draw + buf_flush.
+;            - Blocks sleeping 50ms per poll via key_wait (near 0% idle CPU).
+;            - Dispatches interactive commands:
+;              * 'N' -> Add new journal entry
+;              * 'V' -> View recent 10 entries
+;              * 'B' -> Return to main menu (sets STATE_MENU and returns)
+;              * Ctrl+C -> Exit application (sets STATE_QUIT and returns)
+;            - Ignores unhandled keys without redrawing or triggering sys_write.
+; IN:        None
+; OUT:       None (returns to menu on exit)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 journal_run:
     save_regs
 

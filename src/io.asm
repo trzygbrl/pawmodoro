@@ -10,16 +10,15 @@
 ; TEXT SECTION ROUTINES (section .text opened in src/main.asm)
 ; =============================================================================
 
-; -----------------------------------------------------------------------------
-; buf_char: Append a single byte to the output frame buffer.
-;
-; Purpose:  Stores byte AL into out_buf at index out_len, advancing out_len.
-;           Overflow Protection: If out_len has reached OUT_BUF_SIZE, the byte
-;           is silently discarded to prevent buffer overrun and memory corruption.
-; IN:       AL = Byte/character to append
-; OUT:      none
-; CLOBBERS: none (EFLAGS only)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: buf_char
+; Purpose:   Stores byte AL into out_buf at index out_len, advancing out_len.
+;            Overflow Protection: If out_len has reached OUT_BUF_SIZE, the byte
+;            is silently discarded to prevent buffer overrun and memory corruption.
+; IN:        AL = ASCII byte / character to append
+; OUT:       None (appends byte to out_buf)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 buf_char:
     push ecx
     mov ecx, [out_len]
@@ -34,15 +33,14 @@ buf_char:
     pop ecx
     ret
 
-; -----------------------------------------------------------------------------
-; buf_str: Append a NUL-terminated string to the output buffer.
-;
-; Purpose:  Iterates over the string at ESI and appends each character to out_buf
-;           via buf_char until CHAR_NULL (0) is reached. The NUL byte is not appended.
-; IN:       ESI = Pointer to NUL-terminated source string
-; OUT:      none
-; CLOBBERS: none (EFLAGS only)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: buf_str
+; Purpose:   Iterates over the string at ESI and appends each character to out_buf
+;            via buf_char until CHAR_NULL (0) is reached. The NUL byte is not appended.
+; IN:        ESI = Pointer to NUL-terminated source string
+; OUT:       None (appends string to out_buf)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 buf_str:
     push ebx
     push ecx
@@ -68,17 +66,16 @@ buf_str:
     pop ebx
     ret
 
-; -----------------------------------------------------------------------------
-; buf_u32: Append an unsigned 32-bit integer as decimal digits.
-;
-; Purpose:  Converts unsigned 32-bit integer in EAX into ASCII decimal digits
-;           using repeated unsigned DIV by 10 (DECIMAL_BASE). Digits are collected
-;           in reverse on the stack and then appended in MSB-to-LSB order.
-;           Zero (0) outputs a single "0". Supports full range 0..4294967295.
-; IN:       EAX = Unsigned 32-bit integer to append
-; OUT:      none
-; CLOBBERS: none (EFLAGS only)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: buf_u32
+; Purpose:   Converts unsigned 32-bit integer in EAX into ASCII decimal digits
+;            using repeated unsigned DIV by 10 (DECIMAL_BASE). Digits are collected
+;            in reverse on the stack and then appended in MSB-to-LSB order.
+;            Zero (0) outputs a single "0". Supports full range 0..4294967295.
+; IN:        EAX = 32-bit unsigned integer to append
+; OUT:       None (appends decimal string to out_buf)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 buf_u32:
     push ebx
     push ecx
@@ -124,15 +121,14 @@ buf_u32:
     pop ebx
     ret
 
-; -----------------------------------------------------------------------------
-; buf_u32_2: Append an unsigned 2-digit number, zero-padded (00..99).
-;
-; Purpose:  Formats value in EAX as exactly two decimal digits with a leading
-;           zero if < 10. Values above 99 are clamped to 99 to prevent corruption.
-; IN:       EAX = Unsigned integer (0..99)
-; OUT:      none
-; CLOBBERS: none (EFLAGS only)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: buf_u32_2
+; Purpose:   Formats value in EAX as exactly two decimal digits with a leading
+;            zero if < 10. Values above 99 are clamped to 99 to prevent corruption.
+; IN:        EAX = Unsigned integer (0..99)
+; OUT:       None (appends 2 digits zero-padded [%02u] to out_buf)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 buf_u32_2:
     push ebx
     push ecx
@@ -165,16 +161,15 @@ buf_u32_2:
     pop ebx
     ret
 
-; -----------------------------------------------------------------------------
-; buf_mmss: Append time in seconds formatted as MM:SS.
-;
-; Purpose:  Divides total seconds in EAX by 60 into minutes and seconds.
-;           Both minutes and seconds are formatted as 2-digit zero-padded numbers
-;           separated by a colon (':'). Minutes are clamped to 99 (maximum 99:59).
-; IN:       EAX = Time in seconds (unsigned)
-; OUT:      none
-; CLOBBERS: none (EFLAGS only)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: buf_mmss
+; Purpose:   Divides total seconds in EAX by 60 into minutes and seconds.
+;            Both minutes and seconds are formatted as 2-digit zero-padded numbers
+;            separated by a colon (':'). Minutes are clamped to 99 (maximum 99:59).
+; IN:        EAX = Time in seconds (unsigned)
+; OUT:       None (appends formatted MM:SS string to out_buf)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 buf_mmss:
     push ebx
     push ecx
@@ -214,16 +209,14 @@ buf_mmss:
     pop ebx
     ret
 
-; -----------------------------------------------------------------------------
-; buf_repeat: Append character AL repeated ECX times.
-;
-; Purpose:  Appends the byte in AL to the output buffer ECX times.
-;           If ECX is 0, nothing is appended.
-; IN:       AL = Character byte to repeat
-;           ECX = Repetition count
-; OUT:      none
-; CLOBBERS: none (EFLAGS only)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: buf_repeat
+; Purpose:   Appends the byte in AL to the output buffer ECX times.
+;            If ECX is 0, nothing is appended.
+; IN:        AL = ASCII character byte to repeat, ECX = Repetition count
+; OUT:       None (appends character repeated ECX times to out_buf)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 buf_repeat:
     push ebx
     push ecx
@@ -252,16 +245,14 @@ buf_repeat:
     pop ebx
     ret
 
-; -----------------------------------------------------------------------------
-; buf_goto: Append ANSI cursor positioning sequence ESC[<row>;<col>H.
-;
-; Purpose:  Formats row (EAX) and column (EBX) into an ANSI cursor position
-;           escape sequence and appends it to out_buf. Coordinates are 1-based.
-; IN:       EAX = Row coordinate (1-based)
-;           EBX = Column coordinate (1-based)
-; OUT:      none
-; CLOBBERS: none (EFLAGS only)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: buf_goto
+; Purpose:   Formats row (EAX) and column (EBX) into an ANSI cursor position
+;            escape sequence (ESC[<row>;<col>H) and appends it to out_buf. Coordinates are 1-based.
+; IN:        EAX = Row coordinate (1-based), EBX = Column coordinate (1-based)
+; OUT:       None (appends ANSI cursor sequence ESC[r;cH to out_buf)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 buf_goto:
     push ebx
     push ecx
@@ -303,22 +294,16 @@ buf_goto:
     pop ebx
     ret
 
-; -----------------------------------------------------------------------------
-; buf_flush: Write entire buffered frame to STDOUT in a single system call.
-;
-; Purpose:  Flushes out_buf[0..out_len) to file descriptor 1 (STDOUT).
-;           If out_len is 0, returns immediately without performing a syscall.
-;           Under normal operation, flushes the entire buffer with a single
-;           sys_write call. If a short write occurs, loops to write the remainder.
-;           If interrupted by a signal (-ERR_EINTR), retries the write.
-;           If an unrecoverable negative write error occurs, terminates via
-;           app_exit(EXIT_FAILURE), guarded by [app_exiting] to prevent recursive
-;           exit calls during term_restore.
-;           Unconditionally resets out_len to 0 upon completion.
-; IN:       none
-; OUT:      none
-; CLOBBERS: none (EFLAGS only)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: buf_flush
+; Purpose:   Flushes out_buf[0..out_len) to file descriptor 1 (STDOUT) in a
+;            single sys_write call. If out_len is 0, returns immediately.
+;            Handles partial writes by looping and retries on -ERR_EINTR.
+;            Unconditionally resets out_len to 0 upon completion.
+; IN:        None
+; OUT:       None (single sys_write flushes out_buf, resets out_len index)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 buf_flush:
     push ebx
     push ecx
@@ -380,15 +365,14 @@ buf_flush:
     pop ebx
     ret
 
-; -----------------------------------------------------------------------------
-; str_len: Compute length of a NUL-terminated string.
-;
-; Purpose:  Counts the number of bytes in string ESI up to, but not including,
-;           the terminating CHAR_NULL byte.
-; IN:       ESI = Pointer to NUL-terminated string
-; OUT:      EAX = Length in bytes (without NUL)
-; CLOBBERS: EAX, EFLAGS
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: str_len
+; Purpose:   Counts the number of bytes in string ESI up to, but not including,
+;            the terminating CHAR_NULL byte.
+; IN:        ESI = Pointer to NUL-terminated string
+; OUT:       EAX = Length in bytes (excluding terminating NUL)
+; CLOBBERS:  EAX
+;=============================================================================
 str_len:
     push ebx
     push ecx
@@ -413,16 +397,14 @@ str_len:
     pop ebx
     ret
 
-; -----------------------------------------------------------------------------
-; str_copy: Copy NUL-terminated string from source to destination.
-;
-; Purpose:  Copies bytes from source ESI to destination EDI until CHAR_NULL
-;           is copied. Returns the length of the string (excluding NUL) in EAX.
-; IN:       ESI = Pointer to source string
-;           EDI = Pointer to destination buffer
-; OUT:      EAX = Number of bytes copied (without NUL)
-; CLOBBERS: EAX, EFLAGS
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: str_copy
+; Purpose:   Copies bytes from source ESI to destination EDI until CHAR_NULL
+;            is copied. Returns the length of the string (excluding NUL) in EAX.
+; IN:        ESI = Pointer to source string, EDI = Pointer to destination buffer
+; OUT:       EAX = Bytes copied (excluding terminating NUL)
+; CLOBBERS:  EAX
+;=============================================================================
 str_copy:
     push ebx
     push ecx

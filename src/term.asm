@@ -11,20 +11,19 @@
 ; TEXT SECTION ROUTINES (section .text opened in src/main.asm)
 ; =============================================================================
 
-; -----------------------------------------------------------------------------
-; term_init: Initialize terminal state, alternate screen, and hide cursor.
-;
-; Purpose:  Saves original termios attributes via ioctl TCGETS into termios_orig.
-;           If stdin is not a terminal (ioctl fails with negative status), writes
-;           a descriptive error to stderr (fd 2) and exits with EXIT_FAILURE
-;           WITHOUT emitting any terminal escape sequences.
-;           On success, initializes termios_raw as a copy of termios_orig, switches
-;           to the alternate screen buffer, hides the cursor, flushes output once,
-;           and sets term_active = 1.
-; IN:       none
-; OUT:      none
-; CLOBBERS: EFLAGS only
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: term_init
+; Purpose:   Saves original termios attributes via ioctl TCGETS into termios_orig.
+;            If stdin is not a terminal (ioctl fails with negative status), writes
+;            a descriptive error to stderr (fd 2) and exits with EXIT_FAILURE
+;            WITHOUT emitting any terminal escape sequences.
+;            On success, initializes termios_raw as a copy of termios_orig, switches
+;            to the alternate screen buffer, hides the cursor, flushes output once,
+;            and sets term_active = 1.
+; IN:        None
+; OUT:       None (saves termios, enters alt screen [ESC[?1049h], hides cursor)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 term_init:
     save_regs
 
@@ -58,18 +57,17 @@ term_init:
     syscall SYS_WRITE, FD_STDERR, err_not_a_tty, err_not_a_tty_len
     syscall SYS_EXIT, EXIT_FAILURE
 
-; -----------------------------------------------------------------------------
-; term_restore: Restore original cooked terminal state and leave alternate screen.
-;
-; Purpose:  The single unified terminal cleanup routine. Restores original termios
-;           attributes (termios_orig) via TCSETS, resets terminal styles, restores
-;           cursor visibility, switches back from alternate screen, flushes output,
-;           and clears term_active. If term_active is 0, execution returns safely
-;           without performing redundant operations (safe to call multiple times).
-; IN:       none
-; OUT:      none
-; CLOBBERS: EFLAGS only
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: term_restore
+; Purpose:   The single unified terminal cleanup routine. Restores original termios
+;            attributes (termios_orig) via TCSETS, resets terminal styles, restores
+;            cursor visibility, switches back from alternate screen, flushes output,
+;            and clears term_active. If term_active is 0, execution returns safely
+;            without performing redundant operations (safe to call multiple times).
+; IN:        None
+; OUT:       None (restores termios, leaves alt screen [ESC[?1049l], shows cursor)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 term_restore:
     save_regs
 
@@ -99,18 +97,17 @@ term_restore:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; term_raw: Switch terminal into raw non-canonical mode.
-;
-; Purpose:  Disables ICANON, ECHO, and ISIG flags in termios_raw c_lflag, sets
-;           VMIN = 0 and VTIME = 0 in c_cc, and applies the settings via TCSETS.
-;           Output post-processing (c_oflag) is left untouched.
-;           Because ISIG is cleared, Ctrl+C is delivered as byte 3 without raising
-;           kernel SIGINT signals. This operation is idempotent.
-; IN:       none
-; OUT:      none
-; CLOBBERS: EFLAGS only
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: term_raw
+; Purpose:   Disables ICANON, ECHO, and ISIG flags in termios_raw c_lflag, sets
+;            VMIN = 0 and VTIME = 0 in c_cc, and applies settings via TCSETS.
+;            Output post-processing (c_oflag) is left untouched.
+;            Because ISIG is cleared, Ctrl+C is delivered as byte 3 without raising
+;            kernel SIGINT signals. This operation is idempotent.
+; IN:        None
+; OUT:       None (switches termios to non-blocking raw mode [VMIN=0, VTIME=0])
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 term_raw:
     save_regs
 
@@ -133,15 +130,14 @@ term_raw:
     mov ebx, EXIT_FAILURE
     call app_exit
 
-; -----------------------------------------------------------------------------
-; term_cooked: Switch terminal into standard cooked line mode.
-;
-; Purpose:  Applies original termios settings (termios_orig) via TCSETS so the
-;           user has local echo, canonical line buffering, and backspace editing.
-; IN:       none
-; OUT:      none
-; CLOBBERS: EFLAGS only
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: term_cooked
+; Purpose:   Applies original termios settings (termios_orig) via TCSETS so the
+;            user has local echo, canonical line buffering, and backspace editing.
+; IN:        None
+; OUT:       None (switches termios to canonical cooked mode with echo)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 term_cooked:
     save_regs
 
@@ -156,22 +152,21 @@ term_cooked:
     mov ebx, EXIT_FAILURE
     call app_exit
 
-; -----------------------------------------------------------------------------
-; key_poll: Non-blocking single-key poll.
-;
-; Purpose:  Reads a single byte from FD_STDIN without blocking.
-;           - If no data is available (returns <= 0), returns KEY_NONE (-1).
-;           - Lowercase letters ('a'..'z') are automatically converted to uppercase.
-;           - Lone ESC (byte 27 with no subsequent bytes) returns KEY_ESC (27).
-;           - Multi-byte escape sequences (such as arrow keys ESC [ A) are consumed
-;             and completely drained non-blockingly, returning KEY_NONE (-1) so
-;             no stray escape characters leak into subsequent polls.
-;           - Ctrl+C is returned as KEY_CTRL_C (3).
-;           - Character code is returned zero-extended in EAX (0..255).
-; IN:       none
-; OUT:      EAX = Key code (0..255) or KEY_NONE (-1)
-; CLOBBERS: EAX, EFLAGS
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: key_poll
+; Purpose:   Reads a single byte from FD_STDIN without blocking.
+;            - If no data is available (returns <= 0), returns KEY_NONE (-1).
+;            - Lowercase letters ('a'..'z') are automatically converted to uppercase.
+;            - Lone ESC (byte 27 with no subsequent bytes) returns KEY_ESC (27).
+;            - Multi-byte escape sequences (such as arrow keys ESC [ A) are consumed
+;              and completely drained non-blockingly, returning KEY_NONE (-1) so
+;              no stray escape characters leak into subsequent polls.
+;            - Ctrl+C is returned as KEY_CTRL_C (3).
+;            - Character code is returned zero-extended in EAX (0..255).
+; IN:        None
+; OUT:       EAX = Uppercase key code or -1 (KEY_NONE); ignores escape sequences
+; CLOBBERS:  EAX
+;=============================================================================
 key_poll:
     save_regs
 
@@ -236,16 +231,15 @@ key_poll:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; key_wait: Blocking key reader with low-CPU sleep loop.
-;
-; Purpose:  Repeatedly calls key_poll. If no key is ready (KEY_NONE), sleeps for
-;           50 milliseconds (50,000,000 ns) using sys_nanosleep before retrying.
-;           Eliminates busy-waiting and keeps CPU usage near 0%.
-; IN:       none
-; OUT:      EAX = Key code (guaranteed valid key, never KEY_NONE)
-; CLOBBERS: EAX, EFLAGS
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: key_wait
+; Purpose:   Repeatedly calls key_poll. If no key is ready (KEY_NONE), sleeps for
+;            50 milliseconds (50,000,000 ns) using sys_nanosleep before retrying.
+;            Eliminates busy-waiting and keeps CPU usage near 0%.
+; IN:        None
+; OUT:       EAX = Uppercase key (blocks, polling non-blockingly at 50 ms cadence)
+; CLOBBERS:  EAX
+;=============================================================================
 key_wait:
     save_regs
 
@@ -264,21 +258,19 @@ key_wait:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; read_line: Read a line of user input in cooked mode with editing and draining.
-;
-; Purpose:  Flushes pending output, activates cooked mode (local echo and backspace
-;           editing), and shows the cursor. Reads up to ECX + 1 characters into
-;           buffer EDI. If input ends with newline, the newline is stripped. If
-;           input exceeds ECX characters, the string is truncated at ECX and any
-;           remaining characters on that line are drained until newline is consumed.
-;           Always NUL-terminates the stored string, hides cursor, returns terminal
-;           to raw mode, and returns string length in EAX.
-; IN:       EDI = Destination buffer (must have capacity >= ECX + 2 bytes)
-;           ECX = Maximum allowed characters
-; OUT:      EAX = Length of stored string (without NUL)
-; CLOBBERS: EAX, EFLAGS
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: read_line
+; Purpose:   Flushes pending output, activates cooked mode (local echo and backspace
+;            editing), and shows the cursor. Reads up to ECX + 1 characters into
+;            buffer EDI. If input ends with newline, the newline is stripped. If
+;            input exceeds ECX characters, the string is truncated at ECX and any
+;            remaining characters on that line are drained until newline is consumed.
+;            Always NUL-terminates the stored string, hides cursor, returns terminal
+;            to raw mode, and returns string length in EAX.
+; IN:        EDI = Destination buffer (capacity >= ECX + 2 bytes), ECX = Max characters
+; OUT:       EAX = Length in bytes (NUL-terminated, strips LF, discards overflow)
+; CLOBBERS:  EAX
+;=============================================================================
 read_line:
     save_regs
 
@@ -363,30 +355,28 @@ read_line:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; sig_handler: Signal handler for SIGHUP, SIGINT, and SIGTERM (PRD §4.1 FR-U5).
-;
-; Purpose:  Invoked by kernel on SIGHUP (1), SIGINT (2), or SIGTERM (15).
-;           Calls app_exit(EXIT_SIGNALED = 130) to guarantee term_restore is
-;           executed before terminating, preventing a corrupted terminal shell.
-; IN:       Signal number on stack (ignored)
-; OUT:      Never returns
-; CLOBBERS: n/a
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: sig_handler
+; Purpose:   Invoked by kernel on SIGHUP (1), SIGINT (2), or SIGTERM (15).
+;            Calls app_exit(EXIT_SIGNALED = 130) to guarantee term_restore is
+;            executed before terminating, preventing a corrupted terminal shell.
+; IN:        Signal number on stack (kernel convention, ignored)
+; OUT:       None (never returns)
+; CLOBBERS:  None (process terminates via app_exit)
+;=============================================================================
 sig_handler:
     mov ebx, EXIT_SIGNALED      ; 130 (128 + SIGINT)
     call app_exit
     ; app_exit never returns
 
-; -----------------------------------------------------------------------------
-; term_install_signals: Install signal handlers for terminal restoration.
-;
-; Purpose:  Installs sig_handler for SIGHUP (1), SIGINT (2), and SIGTERM (15)
-;           using sys_signal (syscall 48).
-; IN:       none
-; OUT:      none
-; CLOBBERS: EFLAGS only
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: term_install_signals
+; Purpose:   Installs sig_handler for SIGHUP (1), SIGINT (2), and SIGTERM (15)
+;            using sys_signal (syscall 48).
+; IN:        None
+; OUT:       None
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 term_install_signals:
     save_regs
 
@@ -397,21 +387,20 @@ term_install_signals:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; term_size_ok: Query terminal dimensions and check against 80x24 minimum.
-;
-; Purpose:  Issues ioctl TIOCGWINSZ (0x5413) on FD_STDIN to query terminal size.
-;           If the ioctl fails (negative status) or either dimension is 0,
-;           assumes the size is fine (returns EAX = 1).
-;           Otherwise, extracts ws_row (word @ 0) and ws_col (word @ 2)
-;           using movzx into term_rows and term_cols.
-;           If term_cols >= TERM_MIN_COLS (80) and term_rows >= TERM_MIN_ROWS (24),
-;           returns EAX = 1. Otherwise, returns EAX = 0.
-; IN:       none
-; OUT:      EAX = 1 if >= 80x24 or size unknown, 0 if too small
-;           Stores last rows/cols into [term_rows] and [term_cols]
-; CLOBBERS: EAX, EFLAGS
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: term_size_ok
+; Purpose:   Issues ioctl TIOCGWINSZ (0x5413) on FD_STDIN to query terminal size.
+;            If the ioctl fails (negative status) or either dimension is 0,
+;            assumes the size is fine (returns EAX = 1).
+;            Otherwise, extracts ws_row (word @ 0) and ws_col (word @ 2)
+;            using movzx into term_rows and term_cols.
+;            If term_cols >= TERM_MIN_COLS (80) and term_rows >= TERM_MIN_ROWS (24),
+;            returns EAX = 1. Otherwise, returns EAX = 0.
+; IN:        None
+; OUT:       EAX = 1 if >= 80x24 or size unknown, 0 if too small;
+;            Stores last rows/cols into [term_rows] and [term_cols]
+; CLOBBERS:  EAX
+;=============================================================================
 term_size_ok:
     save_regs
 

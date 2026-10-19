@@ -10,24 +10,23 @@
 ; TEXT SECTION ROUTINES (section .text opened in src/main.asm)
 ; =============================================================================
 
-; -----------------------------------------------------------------------------
-; stats_load: Read stats.dat into memory, apply day-rollover, and sync dashboard.
-;
-; Purpose:  Loads the 12-byte stats.dat record (day, today_count, total_count)
-;           into in-memory variables via file_load.
-;           - Missing or Short File (< 12 bytes, empty, or corrupted):
-;             Initializes empty state per FR-D1: day = time_today, today_count = 0,
-;             total_count = 0. Never crashes on missing/invalid files.
-;           - Day Rollover (FR-D2):
-;             If the stored day number differs from current local day (time_today),
-;             resets today_count = 0 and updates day = time_today (total_count kept).
-;           - Dashboard Sync (FR-U7):
-;             Copies today_count into dash_pomodoros so the main menu displays
-;             the real value upon startup.
-; IN:       none
-; OUT:      none
-; CLOBBERS: EFLAGS only (all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: stats_load
+; Purpose:   Loads the 12-byte stats.dat record (day, today_count, total_count)
+;            into in-memory variables via file_load.
+;            - Missing or Short File (< 12 bytes, empty, or corrupted):
+;              Initializes empty state per FR-D1: day = time_today, today_count = 0,
+;              total_count = 0. Never crashes on missing/invalid files.
+;            - Day Rollover (FR-D2):
+;              If the stored day number differs from current local day (time_today),
+;              resets today_count = 0 and updates day = time_today (total_count kept).
+;            - Dashboard Sync (FR-U7):
+;              Copies today_count into dash_pomodoros so the main menu displays
+;              the real value upon startup.
+; IN:        None
+; OUT:       Loads stats.dat (12 bytes); resets today count on day rollover
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 stats_load:
     save_regs
     push eax
@@ -73,20 +72,18 @@ stats_load:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; stats_add_pomodoro: Increment pomodoro counts, persist to disk, and sync UI.
-;
-; Purpose:  Invoked strictly on natural completion of a FOCUS session.
-;           1. Checks day rollover (in case app remained running past midnight).
-;           2. Increments today_count and total_count.
-;           3. Updates dash_pomodoros immediately for main menu reflection.
-;           4. Writes the 12-byte record to stats.dat using file_save.
-;           5. Records outcome in stats_save_failed (0 = OK, 1 = Failed) so
-;              the timer completion screen can display "Could not save" if needed.
-; IN:       none
-; OUT:      EAX = 0 (FILE_OK) on success, -1 (FILE_ERR) on save failure
-; CLOBBERS: EAX, EFLAGS only (all other registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: stats_add_pomodoro
+; Purpose:   Invoked strictly on natural completion of a FOCUS session.
+;            1. Checks day rollover (in case app remained running past midnight).
+;            2. Increments today_count and total_count.
+;            3. Updates dash_pomodoros immediately for main menu reflection.
+;            4. Writes the 12-byte record to stats.dat using file_save.
+;            5. Records outcome in stats_save_failed (0 = OK, 1 = Failed).
+; IN:        None
+; OUT:       Increments today & total pomodoros; saves 12-byte stats.dat (EAX = 0 or -1)
+; CLOBBERS:  EAX
+;=============================================================================
 stats_add_pomodoro:
     save_regs
 
@@ -131,15 +128,14 @@ stats_add_pomodoro:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; stats_today: Query today's completed pomodoro count.
-;
-; Purpose:  Returns today's completed focus sessions. If the stored day number
-;           differs from current day (time_today), returns 0.
-; IN:       none
-; OUT:      EAX = Today's completed count (0 if day rollover has not yet synced)
-; CLOBBERS: EAX, EFLAGS only (all other registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: stats_today
+; Purpose:   Returns today's completed focus sessions. If the stored day number
+;            differs from current day (time_today), returns 0.
+; IN:        None
+; OUT:       EAX = Pomodoros completed today
+; CLOBBERS:  EAX
+;=============================================================================
 stats_today:
     save_regs
 

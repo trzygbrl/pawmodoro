@@ -11,35 +11,32 @@
 ; TEXT SECTION ROUTINES (section .text opened in src/main.asm)
 ; =============================================================================
 
-; -----------------------------------------------------------------------------
-; habits_get_record: Compute memory address of habit record at index.
-;
-; Purpose:  Calculates habit_records + (index * 48) using LEA and SHL arithmetic.
-;           Adheres to coding conventions prohibiting IMUL instructions.
-; IN:       EAX = Record index (0..MAX_HABITS - 1)
-; OUT:      EAX = Pointer to habit record in memory
-; CLOBBERS: EAX, EFLAGS only (all other registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: habits_get_record
+; Purpose:   Calculates habit_records + (index * 48) using LEA and SHL arithmetic.
+;            Adheres to coding conventions prohibiting IMUL instructions.
+; IN:        EAX = Record index (0..MAX_HABITS - 1)
+; OUT:       EAX = Pointer to habit record in memory
+; CLOBBERS:  EAX
+;=============================================================================
 habits_get_record:
     lea eax, [eax + eax*2]      ; EAX = index * 3
     shl eax, 4                  ; EAX = (index * 3) * 16 = index * 48
     add eax, habit_records      ; EAX = habit_records + (index * 48)
     ret
 
-; -----------------------------------------------------------------------------
-; habits_done_today: Count habits checked in today and total habit count.
-;
-; Purpose:  Iterates over all stored habits. Compares each habit's last_day
-;           against current local day (time_today). If last_day == today, increments
-;           done count. Returns done count in EAX and total habit count in EBX.
-;           CRITICAL CALLING CONVENTION NOTE:
-;           Does NOT use save_regs / restore_regs because EBX is a documented
-;           procedure output register. Manually pushes and pops ECX, EDX, ESI, EDI.
-; IN:       none
-; OUT:      EAX = Number of habits checked in today (0..habit_count)
-;           EBX = Total number of habits (habit_count, 0..8)
-; CLOBBERS: EAX, EBX, EFLAGS only (ECX, EDX, ESI, EDI preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: habits_done_today
+; Purpose:   Iterates over all stored habits. Compares each habit's last_day
+;            against current local day (time_today). If last_day == today, increments
+;            done count. Returns done count in EAX and total habit count in EBX.
+;            CRITICAL CALLING CONVENTION NOTE:
+;            Does NOT use save_regs / restore_regs because EBX is a documented
+;            procedure output register. Manually pushes and pops ECX, EDX, ESI, EDI.
+; IN:        None
+; OUT:       EAX = Habits checked in today, EBX = Total habit count
+; CLOBBERS:  EAX, EBX
+;=============================================================================
 habits_done_today:
     push ecx
     push edx
@@ -75,16 +72,15 @@ habits_done_today:
     pop ecx
     ret
 
-; -----------------------------------------------------------------------------
-; habits_sync_dashboard: Synchronize habit counts to dashboard variables.
-;
-; Purpose:  Invokes habits_done_today and updates dash_habits_done and
-;           dash_habits_total in src/data.asm so the main menu displays
-;           accurate live statistics upon startup and return.
-; IN:       none
-; OUT:      none
-; CLOBBERS: EFLAGS only (all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: habits_sync_dashboard
+; Purpose:   Invokes habits_done_today and updates dash_habits_done and
+;            dash_habits_total in src/data.asm so the main menu displays
+;            accurate live statistics upon startup and return.
+; IN:        None
+; OUT:       None (updates [dash_habits_done] and [dash_habits_total])
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 habits_sync_dashboard:
     save_regs
     call habits_done_today      ; EAX = done today, EBX = total
@@ -93,16 +89,15 @@ habits_sync_dashboard:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; habits_save: Persist habit block to habits.dat.
-;
-; Purpose:  Calculates the exact byte length to persist: 4 bytes for habit_count
-;           plus 48 bytes per habit record (4 + count*48). A zero-habit file is
-;           valid and occupies exactly 4 bytes. Writes data via file_save.
-; IN:       none
-; OUT:      EAX = 0 (FILE_OK) on success, -1 (FILE_ERR) on write failure
-; CLOBBERS: EAX, EFLAGS only (all other registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: habits_save
+; Purpose:   Calculates the exact byte length to persist: 4 bytes for habit_count
+;            plus 48 bytes per habit record (4 + count*48). A zero-habit file is
+;            valid and occupies exactly 4 bytes. Writes data via file_save.
+; IN:        None
+; OUT:       EAX = 0 (FILE_OK) on success, -1 (FILE_ERR) on write failure
+; CLOBBERS:  EAX
+;=============================================================================
 habits_save:
     save_regs
 
@@ -120,22 +115,21 @@ habits_save:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; habits_load: Load and validate habits.dat into memory.
-;
-; Purpose:  Reads up to HABIT_MAX_FILE_SIZE (388) bytes from habits.dat via
-;           file_load into habit_data. Validates integrity per PRD §4.5 FR-D1,
-;           FR-D3, and §7. Treats file as empty state (habit_count = 0) if:
-;           1. Bytes read < 4 (missing file returns -1, empty file returns 0).
-;           2. Stored habit_count > MAX_HABITS (8).
-;           3. Bytes read < (4 + count*48) (truncated/corrupted file).
-;           After a valid load, forces byte 31 of every habit's name to NUL
-;           to prevent string buffer overreads. Syncs dashboard statistics.
-;           Never crashes and never prints to stderr.
-; IN:       none
-; OUT:      none
-; CLOBBERS: EFLAGS only (all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: habits_load
+; Purpose:   Reads up to HABIT_MAX_FILE_SIZE (388) bytes from habits.dat via
+;            file_load into habit_data. Validates integrity per PRD §4.5 FR-D1,
+;            FR-D3, and §7. Treats file as empty state (habit_count = 0) if:
+;            1. Bytes read < 4 (missing file returns -1, empty file returns 0).
+;            2. Stored habit_count > MAX_HABITS (8).
+;            3. Bytes read < (4 + count*48) (truncated/corrupted file).
+;            After a valid load, forces byte 31 of every habit's name to NUL
+;            to prevent string buffer overreads. Syncs dashboard statistics.
+;            Never crashes and never prints to stderr.
+; IN:        None
+; OUT:       None (initializes habit_data, syncs dashboard counters)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 habits_load:
     save_regs
     push eax
@@ -193,22 +187,21 @@ habits_load:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; habits_draw_row: Render a single habit record row into out_buf.
-;
-; Purpose:  Assembles row (5 + index) for habit record index EAX.
-;           - Column 4: Number (e.g. "1.")
-;           - Column 7: Name (up to HABIT_NAME_DISPLAY = 12 characters).
-;                       Sanitizes bytes < 0x20 or == 0x7F to '?' to prevent ANSI injection.
-;           - Column 20: 7 history squares ([#] or [.]) based on shifted history bitmask.
-;           - Column 43: Streak count (0 if delta > 1 or last_day == 0).
-;           - Column 50: Lifetime total check-ins.
-; IN:       EAX = Record index (0..MAX_HABITS - 1)
-;           EBX = Screen row coordinate (UI_HAB_ROW_FIRST + index)
-;           EDX = Current local day number (from time_today)
-; OUT:      Appends formatted habit row text to out_buf
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: habits_draw_row
+; Purpose:   Assembles row (5 + index) for habit record index EAX.
+;            - Column 4: Number (e.g. "1.")
+;            - Column 7: Name (up to HABIT_NAME_DISPLAY = 12 characters).
+;                        Sanitizes bytes < 0x20 or == 0x7F to '?' to prevent ANSI injection.
+;            - Column 20: 7 history squares ([#] or [.]) based on shifted history bitmask.
+;            - Column 43: Streak count (0 if delta > 1 or last_day == 0).
+;            - Column 50: Lifetime total check-ins.
+; IN:        EAX = Record index (0..MAX_HABITS - 1),
+;            EBX = Screen row coordinate (UI_HAB_ROW_FIRST + index),
+;            EDX = Current local day number (from time_today)
+; OUT:       Appends formatted habit row text to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 habits_draw_row:
     save_regs
     push edx                    ; [esp + 8] = today's day number
@@ -379,20 +372,19 @@ habits_draw_row:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; habits_draw: Assemble the full Habit Tracker frame into out_buf.
-;
-; Purpose:  Constructs the 56-column Habit Tracker screen in out_buf adhering
-;           to PRD §5 wireframe. Implements the two-phase rendering pattern:
-;           Phase 1: Moves cursor to (1,1), draws borders and cleared rows
-;                    (Rows 1..16), and clears below the frame with ESC[J.
-;           Phase 2: Overlays title, column headers, separator, habit records,
-;                    feedback message, and key help prompts.
-;           NOTE: Does NOT flush the buffer. Caller invokes buf_flush.
-; IN:       none
-; OUT:      Appends entire frame escape sequences and text to out_buf
-; CLOBBERS: none (EFLAGS only; all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: habits_draw
+; Purpose:   Constructs the 56-column Habit Tracker screen in out_buf adhering
+;            to PRD §5 wireframe. Implements the two-phase rendering pattern:
+;            Phase 1: Moves cursor to (1,1), draws borders and cleared rows
+;                     (Rows 1..16), and clears below the frame with ESC[J.
+;            Phase 2: Overlays title, column headers, separator, habit records,
+;                     feedback message, and key help prompts.
+;            NOTE: Does NOT flush the buffer. Caller invokes buf_flush.
+; IN:        None
+; OUT:       Appends entire frame escape sequences and text to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 habits_draw:
     call ui_size_gate           ; Terminal dimension check gate (Task 9)
     save_regs
@@ -558,24 +550,23 @@ habits_draw:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; habits_check_in: Process check-in key press ('1'..'8') for specified habit.
-;
-; Purpose:  Implements FR-H4 check-in rules:
-;           1. Maps key to 0-based habit index (key - KEY_1).
-;           2. Validates index < habit_count (rejects invalid numbers with message).
-;           3. Computes delta = today - last_day (guarding last_day > today).
-;           4. If delta == 0: sets "Already done today", no state change, no save.
-;           5. If delta > 0:
-;              - history = (delta >= 32 ? 0 : history << delta) | 1
-;              - streak = (delta == 1) ? streak + 1 : 1
-;              - total += 1
-;              - last_day = today
-;              - syncs dashboard and saves to habits.dat.
-; IN:       EAX = Key code (KEY_1..KEY_8)
-; OUT:      none
-; CLOBBERS: EFLAGS only (all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: habits_check_in
+; Purpose:   Implements FR-H4 check-in rules:
+;            1. Maps key to 0-based habit index (key - KEY_1).
+;            2. Validates index < habit_count (rejects invalid numbers with message).
+;            3. Computes delta = today - last_day (guarding last_day > today).
+;            4. If delta == 0: sets "Already done today", no state change, no save.
+;            5. If delta > 0:
+;               - history = (delta >= 32 ? 0 : history << delta) | 1
+;               - streak = (delta == 1) ? streak + 1 : 1
+;               - total += 1
+;               - last_day = today
+;               - syncs dashboard and saves to habits.dat.
+; IN:        EAX = Key code (KEY_1..KEY_8)
+; OUT:       None
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 habits_check_in:
     save_regs
     push eax                    ; [esp] = key code
@@ -665,21 +656,20 @@ habits_check_in:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; habits_add: Interactive addition of a new habit record (Key 'A').
-;
-; Purpose:  Implements FR-H3 addition:
-;           1. Rejects if habit_count == MAX_HABITS (8) with error message.
-;           2. Displays prompt on Row 14, flushes frame, and invokes read_line
-;              with line_buf and max length HABIT_NAME_MAX (31 chars).
-;           3. Empty input cancels with no changes.
-;           4. Non-empty input zeroes the new record, copies the name, initializes
-;              numeric fields to 0, increments habit_count, syncs dashboard,
-;              and saves to habits.dat.
-; IN:       none
-; OUT:      none
-; CLOBBERS: EFLAGS only (all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: habits_add
+; Purpose:   Implements FR-H3 addition:
+;            1. Rejects if habit_count == MAX_HABITS (8) with error message.
+;            2. Displays prompt on Row 14, flushes frame, and invokes read_line
+;               with line_buf and max length HABIT_NAME_MAX (31 chars).
+;            3. Empty input cancels with no changes.
+;            4. Non-empty input zeroes the new record, copies the name, initializes
+;               numeric fields to 0, increments habit_count, syncs dashboard,
+;               and saves to habits.dat.
+; IN:        None
+; OUT:       None
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 habits_add:
     save_regs
 
@@ -759,22 +749,21 @@ habits_add:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; habits_delete: Interactive deletion of an existing habit record (Key 'D').
-;
-; Purpose:  Implements FR-H3 deletion:
-;           1. If habit_count == 0, shows message and cancels.
-;           2. Displays delete prompt on Row 14, flushes frame, and waits for key.
-;           3. If user presses Ctrl+C, sets STATE_QUIT and returns.
-;           4. If user presses a number outside 1..habit_count, cancels silently.
-;           5. If valid number selected:
-;              - Shifts all subsequent records up by one record via REP MOVSB.
-;              - Zeroes out the now-unused last record via REP STOSB.
-;              - Decrements habit_count, syncs dashboard, and saves to habits.dat.
-; IN:       none
-; OUT:      none
-; CLOBBERS: EFLAGS only (all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: habits_delete
+; Purpose:   Implements FR-H3 deletion:
+;            1. If habit_count == 0, shows message and cancels.
+;            2. Displays delete prompt on Row 14, flushes frame, and waits for key.
+;            3. If user presses Ctrl+C, sets STATE_QUIT and returns.
+;            4. If user presses a number outside 1..habit_count, cancels silently.
+;            5. If valid number selected:
+;               - Shifts all subsequent records up by one record via REP MOVSB.
+;               - Zeroes out the now-unused last record via REP STOSB.
+;               - Decrements habit_count, syncs dashboard, and saves to habits.dat.
+; IN:        None
+; OUT:       None
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 habits_delete:
     save_regs
 
@@ -880,23 +869,22 @@ habits_delete:
     restore_regs
     ret
 
-; -----------------------------------------------------------------------------
-; habits_run: Main modal loop for Habit Tracker screen.
-;
-; Purpose:  Runs the modal event loop for the Habit Tracker screen:
-;           - Renders frame on need_redraw dirty flag via habits_draw + buf_flush.
-;           - Blocks sleeping 50ms per poll via key_wait (near 0% idle CPU).
-;           - Dispatches interactive commands:
-;             * 'A' -> Add new habit
-;             * 'D' -> Delete existing habit
-;             * '1'..'8' -> Check in habit today
-;             * 'B' -> Return to main menu (sets STATE_MENU and returns)
-;             * Ctrl+C -> Exit application (sets STATE_QUIT and returns)
-;           - Ignores unhandled keys without redrawing or triggering sys_write.
-; IN:       none
-; OUT:      none (sets [state] = STATE_MENU or STATE_QUIT)
-; CLOBBERS: EFLAGS only (all registers preserved)
-; -----------------------------------------------------------------------------
+;=============================================================================
+; Procedure: habits_run
+; Purpose:   Runs the modal event loop for the Habit Tracker screen:
+;            - Renders frame on need_redraw dirty flag via habits_draw + buf_flush.
+;            - Blocks sleeping 50ms per poll via key_wait (near 0% idle CPU).
+;            - Dispatches interactive commands:
+;              * 'A' -> Add new habit
+;              * 'D' -> Delete existing habit
+;              * '1'..'8' -> Check in habit today
+;              * 'B' -> Return to main menu (sets STATE_MENU and returns)
+;              * Ctrl+C -> Exit application (sets STATE_QUIT and returns)
+;            - Ignores unhandled keys without redrawing or triggering sys_write.
+; IN:        None
+; OUT:       None (returns to menu on exit)
+; CLOBBERS:  None (preserves all)
+;=============================================================================
 habits_run:
     save_regs
 
