@@ -1,6 +1,6 @@
 # Pawmodoro
 
-**Pawmodoro** is an interactive, distraction-free terminal productivity application written in pure **32-bit x86 Assembly (NASM)** for Linux. Developed for **CAO10 (Computer Architecture and Organization, Group 8)** at Angeles University Foundation, the application interfaces directly with the Linux kernel using the legacy `int 0x80` system call interface with zero C runtime (`libc`) dependencies.
+**Pawmodoro** is an interactive, distraction-free terminal productivity application written in pure **32-bit x86 Assembly (NASM)** for Linux. The application interfaces directly with the Linux kernel using the legacy `int 0x80` system call interface with zero C runtime (`libc`) dependencies.
 
 Pawmodoro combines a Pomodoro countdown timer with cozy ASCII art, a daily habit tracker with 7-day visual history and streak calculation, and an append-only timestamped personal journal inside an ANSI/VT100 terminal user interface.
 
@@ -163,12 +163,3 @@ In accordance with PRD §6.3, §7, and §10, the prototype operates with the fol
 3. **Strict Terminal Geometry (80×24):** Pawmodoro requires a terminal window of at least 80 columns by 24 rows. If the window falls below this geometry, the synchronous resize gate (`ui_size_gate`) halts rendering and prompts the user to enlarge the screen.
 4. **Exit Status Code Semantics:** Clean exits via key `Q` or `Ctrl+C` in raw mode return status code `0` (`EXIT_SUCCESS`). Exits triggered by `Ctrl+C` (`SIGINT`) during cooked mode line input return status code `130` (`128 + SIGINT`) per POSIX standards.
 
----
-
-## Course Information
-
-- **Course:** CAO10 — Computer Architecture and Organization
-- **Group:** Group 8
-- **Proponents:** Trizy Gabriel N. Nicdao, Laurenze R. Punla, Kyla Catherine B. Yalung
-- **Institution:** College of Computer Studies, Angeles University Foundation
-- **Term:** First Semester, A.Y. 2026–2027
