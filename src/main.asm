@@ -43,15 +43,19 @@ section .text
 ; -----------------------------------------------------------------------------
 _start:
     ; -------------------------------------------------------------------------
-    ; Step 1: Terminal Initialization & State Setup (FR-U1)
+    ; Step 1: Terminal Initialization & State Setup (FR-U1, FR-U5)
     ; -------------------------------------------------------------------------
     call term_init
+    call term_install_signals   ; Install SIGHUP, SIGINT, SIGTERM signal handlers (Task 9)
     call term_raw
     call stats_load             ; Load persisted stats.dat into memory & sync dashboard (FR-U7, FR-D2)
     call habits_load            ; Load persisted habits.dat into memory & sync dashboard (FR-U7, FR-D3)
+    call dashboard_refresh      ; Initialize live dashboard values in memory (Task 9)
 
     mov dword [state], STATE_MENU
     mov dword [demo_mode], 0
+    mov dword [menu_msg], 0
+    mov dword [menu_msg_style], STATUS_INFO
     mov dword [need_redraw], 1
 
     ; -------------------------------------------------------------------------
@@ -76,6 +80,7 @@ _start:
     jmp .render_menu
 
 .render_menu:
+    call dashboard_refresh      ; Refresh live daily stats on every return to menu (Task 9)
     call ui_draw_menu
     jmp .flush_frame
 
@@ -156,6 +161,17 @@ _start:
 
 .menu_toggle_demo:
     xor dword [demo_mode], 1    ; Flip demo_mode between 0 and 1
+    cmp dword [demo_mode], 1
+    je .demo_active
+    mov dword [menu_msg], menu_msg_demo_off
+    mov dword [menu_msg_style], STATUS_INFO
+    jmp .demo_set_done
+
+.demo_active:
+    mov dword [menu_msg], menu_msg_demo_on
+    mov dword [menu_msg_style], STATUS_OK
+
+.demo_set_done:
     mov dword [need_redraw], 1
     jmp .main_loop
 
@@ -183,9 +199,48 @@ _start:
 ; State Handler: STATE_QUIT & Cleanup (FR-U5)
 ; -----------------------------------------------------------------------------
 .handle_exit:
-    ; Guaranteed terminal restoration before exit
+    mov ebx, EXIT_SUCCESS
+    call app_exit
+
+; -----------------------------------------------------------------------------
+; dashboard_refresh: Update dashboard statistics from in-memory stores.
+;
+; Purpose:  Reloads live daily statistics into dashboard display variables:
+;           1. Queries stats_today to update dash_pomodoros with today's count.
+;           2. Invokes habits_sync_dashboard to refresh dash_habits_done and
+;              dash_habits_total.
+;           Does not perform file I/O; reads current in-memory write-through data.
+; IN:       none
+; OUT:      Updates [dash_pomodoros], [dash_habits_done], [dash_habits_total]
+; CLOBBERS: EFLAGS only
+; -----------------------------------------------------------------------------
+dashboard_refresh:
+    save_regs
+
+    call stats_today            ; EAX = today's completed pomodoros
+    mov [dash_pomodoros], eax
+
+    call habits_sync_dashboard  ; Updates dash_habits_done and dash_habits_total
+
+    restore_regs
+    ret
+
+; -----------------------------------------------------------------------------
+; app_exit: Centralized process exit routine with guaranteed terminal cleanup.
+;
+; Purpose:  Sets the exiting flag [app_exiting] = 1 to prevent recursive exit calls
+;           from buf_flush, invokes term_restore to return the terminal to original
+;           cooked mode, and terminates the process via sys_exit with code in EBX.
+; IN:       EBX = Process exit code
+; OUT:      Never returns
+; CLOBBERS: n/a
+; -----------------------------------------------------------------------------
+app_exit:
+    mov dword [app_exiting], 1  ; Prevent re-entrant exit during term_restore
+    push ebx                    ; Preserve exit code across term_restore
     call term_restore
-    syscall SYS_EXIT, EXIT_SUCCESS
+    pop ebx                     ; Restore exit code
+    syscall SYS_EXIT, ebx
 
 ; =============================================================================
 ; STACK NOTE SECTION

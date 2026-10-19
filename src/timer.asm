@@ -12,6 +12,7 @@
 ; =============================================================================
 
 ; -----------------------------------------------------------------------------
+; -----------------------------------------------------------------------------
 ; timer_draw: Render the Pomodoro Timer frame into out_buf.
 ;
 ; Purpose:  Assembles the entire Pomodoro Timer frame in out_buf adhering to the
@@ -21,19 +22,23 @@
 ;           Phase 2: Overlays title ("<PHASE> - Session n of 4"), demo tag
 ;                    ("[DEMO]"), cat ASCII art (working/resting pose), time display
 ;                    (MM:SS with "PAUSED" indicator if paused), 30-char progress
-;                    bar via ui_progress_bar, optional completion message on Row 8,
-;                    and key help prompts on Row 9.
+;                    bar via ui_progress_bar, phase message / prompt on Row 8,
+;                    and context-sensitive key help on Row 9.
 ;           NOTE: Does NOT flush the buffer. Caller invokes buf_flush (or appends
 ;                 the audio bell before flushing).
-; IN:       EAX = Completion flag:
-;                 0 = Normal active/paused frame (Row 8 blank)
-;                 1 = Completion frame (Row 8 displays completion message)
+; IN:       EAX = Frame completion / prompt mode:
+;                 TIMER_FRAME_RUNNING (0): Normal active/paused frame
+;                 TIMER_FRAME_BREAK_DONE (1): Break over message & help
+;                 TIMER_FRAME_FOCUS_DONE (2): Focus complete note prompt & help
+;                 TIMER_FRAME_NOTE_PROMPT (3): Note input prompt (row 8)
+;                 TIMER_FRAME_NOTE_RESULT (4): Note result status (timer_result_msg)
 ; OUT:      Appends entire frame escape sequences and text to out_buf
 ; CLOBBERS: none (EFLAGS only; all registers preserved)
 ; -----------------------------------------------------------------------------
 timer_draw:
+    call ui_size_gate           ; Terminal dimension check gate (Task 9)
     save_regs
-    push eax                    ; [esp] = completion flag
+    push eax                    ; [esp] = frame mode (0..4)
 
     ; -------------------------------------------------------------------------
     ; Phase 1: Draw Frame Borders and Erase Inner Rows (FR-U4)
@@ -174,73 +179,139 @@ timer_draw:
     mov ecx, [total_secs]        ; ECX = total seconds
     call ui_progress_bar
 
-    ; 7. Completion message at Row 8, Col 4 (if completion flag is set)
-    mov edx, [esp]              ; Retrieve completion flag
-    test edx, edx
-    jz .skip_msg
+    ; 7. Completion message / prompt at Row 8, Col 4
+    mov edx, [esp]              ; EDX = frame mode (0..4)
 
+    cmp edx, TIMER_FRAME_RUNNING
+    je .skip_msg                ; Mode 0: Row 8 is blank
+
+    cmp edx, TIMER_FRAME_BREAK_DONE
+    je .draw_break_done_msg
+
+    cmp edx, TIMER_FRAME_FOCUS_DONE
+    je .draw_focus_done_msg
+
+    cmp edx, TIMER_FRAME_NOTE_PROMPT
+    je .draw_note_prompt_msg
+
+    cmp edx, TIMER_FRAME_NOTE_RESULT
+    je .draw_note_result_msg
+
+    jmp .skip_msg
+
+.draw_break_done_msg:
     mov eax, UI_TIMER_ROW_MSG
-    mov ebx, UI_TIMER_COL_MSG
-    call buf_goto
-
-    mov esi, ansi_bold
-    call buf_str
-    mov esi, ansi_fg_bright_green
-    call buf_str
-
-    cmp dword [phase], PHASE_FOCUS
-    jne .msg_break
-    mov esi, timer_msg_focus_done
-    jmp .emit_msg
-.msg_break:
+    mov ebx, STATUS_OK
     mov esi, timer_msg_break_done
-.emit_msg:
-    call buf_str
-    mov esi, ansi_reset
-    call buf_str
+    call ui_draw_status
+    jmp .skip_msg
+
+.draw_focus_done_msg:
+    mov eax, UI_TIMER_ROW_MSG
+    mov ebx, STATUS_OK
+    mov esi, timer_msg_focus_prompt
+    call ui_draw_status
 
     ; Check if "Could not save" warning should be displayed on Row 3 (FR-D4)
-    ; Displayed ONLY on FOCUS completion frames when stats_save_failed == 1
-    cmp dword [phase], PHASE_FOCUS
-    jne .skip_msg
-
+    ; Displayed on FOCUS completion when stats_save_failed == STATS_SAVE_FAILED
     cmp dword [stats_save_failed], STATS_SAVE_FAILED
     jne .skip_msg
 
     mov eax, UI_TIMER_ROW_BLANK1
-    mov ebx, UI_TIMER_COL_MSG
-    call buf_goto
-
-    mov esi, ansi_bold
-    call buf_str
-    mov esi, ansi_fg_bright_red
-    call buf_str
+    mov ebx, STATUS_ERR
     mov esi, err_could_not_save
-    call buf_str
-    mov esi, ansi_reset
-    call buf_str
+    call ui_draw_status
+    jmp .skip_msg
+
+.draw_note_prompt_msg:
+    mov eax, UI_TIMER_ROW_MSG
+    mov ebx, UI_TIMER_COL_MSG
+    mov esi, timer_msg_note_input
+    call ui_text_at
+    jmp .skip_msg
+
+.draw_note_result_msg:
+    mov eax, UI_TIMER_ROW_MSG
+    mov ebx, [timer_result_style]
+    mov esi, [timer_result_msg]
+    call ui_draw_status
 
 .skip_msg:
     ; 8. Key help prompt at Row 9, Col 4
+    mov edx, [esp]              ; EDX = frame mode (0..4)
+
+    cmp edx, TIMER_FRAME_RUNNING
+    je .help_mode_running
+
+    cmp edx, TIMER_FRAME_BREAK_DONE
+    je .help_mode_break_done
+
+    cmp edx, TIMER_FRAME_FOCUS_DONE
+    je .help_mode_focus_done
+
+    cmp edx, TIMER_FRAME_NOTE_PROMPT
+    je .help_done               ; Row 9 is blank during interactive note input
+
+    cmp edx, TIMER_FRAME_NOTE_RESULT
+    je .help_mode_note_result
+
+    jmp .help_done
+
+.help_mode_running:
     mov eax, UI_TIMER_ROW_HELP
     mov ebx, UI_TIMER_COL_HELP
     call buf_goto
-
     mov esi, ansi_fg_cyan
     call buf_str
-
     cmp dword [paused], 1
-    jne .help_running
+    jne .emit_running_help
     mov esi, timer_help_paused
-    jmp .emit_help
-.help_running:
+    jmp .emit_running_text
+.emit_running_help:
     mov esi, timer_help_running
-.emit_help:
+.emit_running_text:
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+    jmp .help_done
+
+.help_mode_break_done:
+    mov eax, UI_TIMER_ROW_HELP
+    mov ebx, UI_TIMER_COL_HELP
+    call buf_goto
+    mov esi, ansi_fg_cyan
+    call buf_str
+    mov esi, timer_help_break_done
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+    jmp .help_done
+
+.help_mode_focus_done:
+    mov eax, UI_TIMER_ROW_HELP
+    mov ebx, UI_TIMER_COL_HELP
+    call buf_goto
+    mov esi, ansi_fg_cyan
+    call buf_str
+    mov esi, timer_help_focus_prompt
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+    jmp .help_done
+
+.help_mode_note_result:
+    mov eax, UI_TIMER_ROW_HELP
+    mov ebx, UI_TIMER_COL_HELP
+    call buf_goto
+    mov esi, ansi_fg_cyan
+    call buf_str
+    mov esi, timer_help_note_result
     call buf_str
     mov esi, ansi_reset
     call buf_str
 
-    pop eax                     ; Restore completion flag
+.help_done:
+    pop eax                     ; Restore frame mode
     restore_regs
     ret
 
@@ -505,29 +576,95 @@ timer_run:
 .phase_natural_complete:
     ; Natural completion: check if focus completed
     cmp dword [phase], PHASE_FOCUS
-    jne .draw_completion_frame
+    jne .break_natural_complete
+
+    ; Focus phase naturally completed (FR-T6, FR-T8)
     mov dword [focus_completed_flag], 1
     call stats_add_pomodoro
 
-.draw_completion_frame:
-    ; Draw completion frame with completion message
-    mov eax, 1                  ; 1 = completion frame
+    ; Render focus completion frame (mode 2) with bell in a single write
+    mov eax, TIMER_FRAME_FOCUS_DONE
     call timer_draw
-
-    ; Append terminal bell (0x07) to the same buffer
     mov esi, ansi_bell
     call buf_str
-
-    ; Flush complete frame and bell in a SINGLE sys_write (FR-U4, FR-T6)
     call buf_flush
 
-    ; Wait for any keypress before transitioning (FR-T6)
+    ; Wait for user decision
+    call key_wait
+    cmp eax, KEY_CTRL_C
+    je .key_ctrl_c
+    cmp eax, KEY_Y
+    je .do_quick_note
+
+    ; Any other key (including Q): advance directly to break
+    jmp .advance_to_break
+
+.do_quick_note:
+    ; Redraw frame with note prompt on row 8 (mode 3)
+    mov eax, TIMER_FRAME_NOTE_PROMPT
+    call timer_draw
+
+    ; Position cursor right after prompt on Row 8
+    mov esi, timer_msg_note_input
+    call str_len                ; EAX = prompt length
+    mov ebx, UI_TIMER_COL_MSG
+    add ebx, eax                ; EBX = col right after prompt
+    mov eax, UI_TIMER_ROW_MSG
+    call buf_goto
+
+    ; Read note text via read_line in cooked mode
+    mov edi, line_buf
+    mov ecx, JOURNAL_ENTRY_MAX
+    call read_line              ; EAX = length of entered text
+
+    ; Empty input cancels silently and continues to break
+    test eax, eax
+    jz .advance_to_break
+
+    ; Non-empty: call journal_add
+    mov esi, line_buf
+    call journal_add            ; EAX = 0 ok, -1 err
+    test eax, eax
+    jnz .note_save_error
+
+    ; Note saved successfully
+    mov dword [timer_result_msg], timer_msg_note_saved
+    mov dword [timer_result_style], STATUS_OK
+    jmp .show_note_feedback
+
+.note_save_error:
+    mov dword [timer_result_msg], err_could_not_save
+    mov dword [timer_result_style], STATUS_ERR
+
+.show_note_feedback:
+    ; Redraw completion frame with feedback message (mode 4)
+    ; This redraw wipes cooked mode echo residue
+    mov eax, TIMER_FRAME_NOTE_RESULT
+    call timer_draw
+    call buf_flush
+
+    ; Wait for keypress before advancing to break
+    call key_wait
+    cmp eax, KEY_CTRL_C
+    je .key_ctrl_c
+    jmp .advance_to_break
+
+.break_natural_complete:
+    ; Break phase naturally completed (FR-T6)
+    mov eax, TIMER_FRAME_BREAK_DONE
+    call timer_draw
+    mov esi, ansi_bell
+    call buf_str
+    call buf_flush
+
+    ; Wait for user input: Q stops and returns to menu, any other key continues
     call key_wait
     cmp eax, KEY_CTRL_C
     je .key_ctrl_c
     cmp eax, KEY_Q
     je .key_q
 
+.advance_to_break:
     ; Advance phase and session counter
     call timer_advance_phase
     jmp .phase_entry

@@ -123,9 +123,15 @@ term_raw:
 
     ; Apply raw configuration
     syscall SYS_IOCTL, FD_STDIN, TCSETS, termios_raw
+    test eax, eax
+    js .raw_failed
 
     restore_regs
     ret
+
+.raw_failed:
+    mov ebx, EXIT_FAILURE
+    call app_exit
 
 ; -----------------------------------------------------------------------------
 ; term_cooked: Switch terminal into standard cooked line mode.
@@ -140,9 +146,15 @@ term_cooked:
     save_regs
 
     syscall SYS_IOCTL, FD_STDIN, TCSETS, termios_orig
+    test eax, eax
+    js .cooked_failed
 
     restore_regs
     ret
+
+.cooked_failed:
+    mov ebx, EXIT_FAILURE
+    call app_exit
 
 ; -----------------------------------------------------------------------------
 ; key_poll: Non-blocking single-key poll.
@@ -166,8 +178,21 @@ key_poll:
     ; Attempt non-blocking 1-byte read from standard input
     syscall SYS_READ, FD_STDIN, in_buf, 1
     cmp eax, 1
-    jne .poll_no_key            ; 0 = no data, negative = error/interrupt
+    je .poll_got_key            ; Exactly 1 byte read
 
+    ; Check if no data is available or non-fatal interruption
+    test eax, eax
+    jz .poll_no_key             ; 0 = no data ready / EOF
+    cmp eax, -ERR_EINTR         ; Interrupted by signal (-4)
+    je .poll_no_key
+    cmp eax, -ERR_EAGAIN        ; Resource temporarily unavailable (-11)
+    je .poll_no_key
+
+    ; Unhandled negative status: fatal sys_read error
+    mov ebx, EXIT_FAILURE
+    call app_exit
+
+.poll_got_key:
     ; Check if byte is Escape (CHAR_ESC = 27)
     cmp byte [in_buf], CHAR_ESC
     je .poll_check_escape
@@ -335,5 +360,95 @@ read_line:
     call term_raw
 
     pop eax                     ; Restore return length
+    restore_regs
+    ret
+
+; -----------------------------------------------------------------------------
+; sig_handler: Signal handler for SIGHUP, SIGINT, and SIGTERM (PRD §4.1 FR-U5).
+;
+; Purpose:  Invoked by kernel on SIGHUP (1), SIGINT (2), or SIGTERM (15).
+;           Calls app_exit(EXIT_SIGNALED = 130) to guarantee term_restore is
+;           executed before terminating, preventing a corrupted terminal shell.
+; IN:       Signal number on stack (ignored)
+; OUT:      Never returns
+; CLOBBERS: n/a
+; -----------------------------------------------------------------------------
+sig_handler:
+    mov ebx, EXIT_SIGNALED      ; 130 (128 + SIGINT)
+    call app_exit
+    ; app_exit never returns
+
+; -----------------------------------------------------------------------------
+; term_install_signals: Install signal handlers for terminal restoration.
+;
+; Purpose:  Installs sig_handler for SIGHUP (1), SIGINT (2), and SIGTERM (15)
+;           using sys_signal (syscall 48).
+; IN:       none
+; OUT:      none
+; CLOBBERS: EFLAGS only
+; -----------------------------------------------------------------------------
+term_install_signals:
+    save_regs
+
+    syscall SYS_SIGNAL, SIGHUP, sig_handler
+    syscall SYS_SIGNAL, SIGINT, sig_handler
+    syscall SYS_SIGNAL, SIGTERM, sig_handler
+
+    restore_regs
+    ret
+
+; -----------------------------------------------------------------------------
+; term_size_ok: Query terminal dimensions and check against 80x24 minimum.
+;
+; Purpose:  Issues ioctl TIOCGWINSZ (0x5413) on FD_STDIN to query terminal size.
+;           If the ioctl fails (negative status) or either dimension is 0,
+;           assumes the size is fine (returns EAX = 1).
+;           Otherwise, extracts ws_row (word @ 0) and ws_col (word @ 2)
+;           using movzx into term_rows and term_cols.
+;           If term_cols >= TERM_MIN_COLS (80) and term_rows >= TERM_MIN_ROWS (24),
+;           returns EAX = 1. Otherwise, returns EAX = 0.
+; IN:       none
+; OUT:      EAX = 1 if >= 80x24 or size unknown, 0 if too small
+;           Stores last rows/cols into [term_rows] and [term_cols]
+; CLOBBERS: EAX, EFLAGS
+; -----------------------------------------------------------------------------
+term_size_ok:
+    save_regs
+
+    ; Query window size via ioctl TIOCGWINSZ
+    syscall SYS_IOCTL, FD_STDIN, TIOCGWINSZ, winsize
+    test eax, eax
+    js .size_unknown            ; ioctl failed: assume size is fine
+
+    ; Read ws_row (word at offset 0) and ws_col (word at offset 2)
+    movzx eax, word [winsize + WINSIZE_OFF_ROWS]
+    mov [term_rows], eax
+    movzx edx, word [winsize + WINSIZE_OFF_COLS]
+    mov [term_cols], edx
+
+    ; If either rows or cols is 0, treat as unknown/fine
+    test eax, eax
+    jz .size_unknown
+    test edx, edx
+    jz .size_unknown
+
+    ; Check cols >= TERM_MIN_COLS (80) and rows >= TERM_MIN_ROWS (24)
+    cmp edx, TERM_MIN_COLS
+    jb .size_too_small
+    cmp eax, TERM_MIN_ROWS
+    jb .size_too_small
+
+    ; Size is at least 80x24
+    mov eax, 1
+    jmp .size_done
+
+.size_too_small:
+    xor eax, eax                ; EAX = 0
+    jmp .size_done
+
+.size_unknown:
+    mov eax, 1
+
+.size_done:
     restore_regs
     ret

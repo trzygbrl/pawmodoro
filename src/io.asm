@@ -306,9 +306,15 @@ buf_goto:
 ; -----------------------------------------------------------------------------
 ; buf_flush: Write entire buffered frame to STDOUT in a single system call.
 ;
-; Purpose:  Flushes out_buf[0..out_len) to file descriptor 1 (STDOUT) using
-;           exactly one sys_write syscall. If out_len is 0, no syscall is made.
-;           out_len is unconditionally reset to 0 after execution.
+; Purpose:  Flushes out_buf[0..out_len) to file descriptor 1 (STDOUT).
+;           If out_len is 0, returns immediately without performing a syscall.
+;           Under normal operation, flushes the entire buffer with a single
+;           sys_write call. If a short write occurs, loops to write the remainder.
+;           If interrupted by a signal (-ERR_EINTR), retries the write.
+;           If an unrecoverable negative write error occurs, terminates via
+;           app_exit(EXIT_FAILURE), guarded by [app_exiting] to prevent recursive
+;           exit calls during term_restore.
+;           Unconditionally resets out_len to 0 upon completion.
 ; IN:       none
 ; OUT:      none
 ; CLOBBERS: none (EFLAGS only)
@@ -325,8 +331,42 @@ buf_flush:
     test edx, edx
     jz .flush_done              ; Zero bytes buffered: do not perform syscall
 
-    ; Execute single sys_write(FD_STDOUT, out_buf, out_len)
-    syscall SYS_WRITE, FD_STDOUT, out_buf, edx
+    mov esi, out_buf            ; ESI = current buffer pointer
+    mov edi, edx                ; EDI = remaining bytes to write
+
+.flush_write_loop:
+    ; syscall SYS_WRITE: EAX = 4, EBX = FD_STDOUT (1), ECX = ESI, EDX = EDI
+    mov eax, SYS_WRITE
+    mov ebx, FD_STDOUT
+    mov ecx, esi
+    mov edx, edi
+    int 0x80
+
+    ; Check result in EAX
+    cmp eax, edi
+    je .flush_done              ; Exactly all remaining bytes written (common path: 1 write!)
+
+    test eax, eax
+    jg .flush_short_write       ; Greater than 0: short write, advance and continue
+
+    ; Return value <= 0
+    cmp eax, -ERR_EINTR         ; Interrupted by signal: retry write
+    je .flush_write_loop
+
+    ; Negative error: check recursion guard [app_exiting]
+    cmp dword [app_exiting], 1
+    je .flush_done              ; In the middle of app_exit: discard buffer and return
+
+    ; Fatal write error outside of app_exit
+    mov dword [out_len], 0
+    mov ebx, EXIT_FAILURE
+    call app_exit
+
+.flush_short_write:
+    add esi, eax                ; Advance buffer pointer by bytes written
+    sub edi, eax                ; Decrement remaining byte count
+    test edi, edi
+    jnz .flush_write_loop       ; Write remainder if bytes still pending
 
 .flush_done:
     ; Unconditionally reset buffer index to prevent replaying data

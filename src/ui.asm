@@ -122,6 +122,10 @@ ui_frame_hline:
     mov al, CHAR_PLUS
     call buf_char
 
+    ; Clear remainder of line to prevent wrapped text residue on border rows (Task 9)
+    mov esi, ansi_erase_eol
+    call buf_str
+
     pop eax
     restore_regs
     ret
@@ -199,6 +203,7 @@ ui_text_at:
 ; CLOBBERS: none (EFLAGS only; all registers preserved)
 ; -----------------------------------------------------------------------------
 ui_draw_menu:
+    call ui_size_gate
     save_regs
     push eax
 
@@ -242,11 +247,19 @@ ui_draw_menu:
     mov eax, UI_MENU_ROW_ITEMQ
     call ui_frame_row
 
-    ; Row 13: Bottom border
+    ; Row 13: Status / message row
+    mov eax, UI_MENU_ROW_STATUS
+    call ui_frame_row
+
+    ; Row 14: Key help row
+    mov eax, UI_MENU_ROW_HELP
+    call ui_frame_row
+
+    ; Row 15: Bottom border
     mov eax, UI_MENU_ROW_BOTTOM
     call ui_frame_hline
 
-    ; Row 14: Move below frame and erase to end of screen (ESC[J)
+    ; Row 16: Move below frame and erase to end of screen (ESC[J)
     mov eax, UI_MENU_ROW_BELOW
     mov ebx, UI_FRAME_COL_LEFT
     call buf_goto
@@ -379,6 +392,18 @@ ui_draw_menu:
     mov eax, UI_MENU_ROW_ITEMQ
     mov ebx, UI_MENU_COL_CONTENT
     mov esi, menu_item_q
+    call ui_text_at
+
+    ; 6. Status message at Row 13, Col 4
+    mov eax, UI_MENU_ROW_STATUS
+    mov ebx, [menu_msg_style]
+    mov esi, [menu_msg]
+    call ui_draw_status
+
+    ; 7. Footer key help prompt at Row 14, Col 4
+    mov eax, UI_MENU_ROW_HELP
+    mov ebx, UI_MENU_COL_HELP
+    mov esi, menu_help
     call ui_text_at
 
     pop eax
@@ -564,6 +589,173 @@ ui_progress_bar:
     mov al, CHAR_PERCENT
     call buf_char
 
+    pop eax
+    restore_regs
+    ret
+
+; -----------------------------------------------------------------------------
+; ui_size_gate: Terminal dimension enforcement gate.
+;
+; Purpose:  Checks if terminal size is at least 80x24 via term_size_ok.
+;           If smaller than 80x24, loops displaying an enlarge warning:
+;             Row 1: "Please enlarge the terminal"
+;             Row 2: "(need 80x24, now <cols>x<rows>)"
+;           During loop, sleeps 100ms via time_sleep_100ms and polls for Ctrl+C.
+;           If Ctrl+C is pressed, calls app_exit(EXIT_SUCCESS).
+;           When dimensions recover to >= 80x24, appends ansi_clear to out_buf so
+;           subsequent screen redraw paints on a pristine screen, and returns.
+; IN:       none
+; OUT:      none
+; CLOBBERS: EFLAGS only (all registers preserved)
+; -----------------------------------------------------------------------------
+ui_size_gate:
+    save_regs
+    push eax
+
+    call term_size_ok
+    test eax, eax
+    jnz .gate_done              ; Size is >= 80x24 or unknown: return immediately
+
+.gate_draw_warning:
+    ; Discard any incomplete pending frame
+    mov dword [out_len], 0
+
+    ; Clear screen and move cursor home
+    mov esi, ansi_clear
+    call buf_str
+    mov esi, ansi_home
+    call buf_str
+
+    ; Row 1: "Please enlarge the terminal"
+    mov eax, 1
+    mov ebx, 1
+    call buf_goto
+    mov esi, ansi_bold
+    call buf_str
+    mov esi, ansi_fg_bright_yellow
+    call buf_str
+    mov esi, ui_msg_enlarge
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+
+    ; Row 2: "(need 80x24, now <cols>x<rows>)"
+    mov eax, 2
+    mov ebx, 1
+    call buf_goto
+    mov esi, ui_msg_need_prefix
+    call buf_str
+    mov eax, [term_cols]
+    call buf_u32
+    mov esi, ui_msg_need_x
+    call buf_str
+    mov eax, [term_rows]
+    call buf_u32
+    mov esi, ui_msg_need_suffix
+    call buf_str
+
+    ; Flush warning frame to screen
+    call buf_flush
+
+    ; Record displayed dimensions in EDX:ECX for dynamic update
+    mov edx, [term_cols]
+    mov ecx, [term_rows]
+
+.gate_wait_loop:
+    call time_sleep_100ms
+    call key_poll
+    cmp eax, KEY_CTRL_C
+    je .gate_ctrl_c
+
+    call term_size_ok
+    test eax, eax
+    jnz .gate_recovered
+
+    ; Size still insufficient: check if dimensions changed
+    cmp edx, [term_cols]
+    jne .gate_draw_warning
+    cmp ecx, [term_rows]
+    jne .gate_draw_warning
+    jmp .gate_wait_loop
+
+.gate_ctrl_c:
+    mov ebx, EXIT_SUCCESS
+    call app_exit
+
+.gate_recovered:
+    ; Append ansi_clear so subsequent normal frame redraw clears warning text
+    mov esi, ansi_clear
+    call buf_str
+
+.gate_done:
+    pop eax
+    restore_regs
+    ret
+
+; -----------------------------------------------------------------------------
+; ui_draw_status: Append styled status message at (row, col 4).
+;
+; Purpose:  Positions cursor at (EAX, 4) and emits string at ESI styled
+;           according to EBX:
+;             STATUS_INFO (0): ansi_fg_bright_yellow
+;             STATUS_OK (1):   ansi_bold + ansi_fg_bright_green
+;             STATUS_ERR (2):  ansi_bold + ansi_fg_bright_red
+;           If ESI is 0 (NULL), nothing is drawn.
+;           Always emits ansi_reset after message.
+; IN:       EAX = Row coordinate (1-based)
+;           EBX = Status style (STATUS_INFO, STATUS_OK, STATUS_ERR)
+;           ESI = Pointer to NUL-terminated message string (0 = none)
+; OUT:      none
+; CLOBBERS: EFLAGS only
+; -----------------------------------------------------------------------------
+ui_draw_status:
+    save_regs
+    push eax
+    push ebx
+    push esi
+
+    test esi, esi
+    jz .status_done             ; NULL pointer: do not draw anything
+
+    ; Position cursor at (row, 4)
+    mov ebx, 4
+    call buf_goto
+
+    ; Retrieve style from stack
+    mov ebx, [esp + 4]
+
+    cmp ebx, STATUS_OK
+    je .status_style_ok
+    cmp ebx, STATUS_ERR
+    je .status_style_err
+
+    ; STATUS_INFO: bright yellow
+    mov esi, ansi_fg_bright_yellow
+    call buf_str
+    jmp .status_emit
+
+.status_style_ok:
+    mov esi, ansi_bold
+    call buf_str
+    mov esi, ansi_fg_bright_green
+    call buf_str
+    jmp .status_emit
+
+.status_style_err:
+    mov esi, ansi_bold
+    call buf_str
+    mov esi, ansi_fg_bright_red
+    call buf_str
+
+.status_emit:
+    mov esi, [esp]              ; Retrieve message pointer
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+
+.status_done:
+    pop esi
+    pop ebx
     pop eax
     restore_regs
     ret

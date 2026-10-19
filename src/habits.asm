@@ -394,6 +394,7 @@ habits_draw_row:
 ; CLOBBERS: none (EFLAGS only; all registers preserved)
 ; -----------------------------------------------------------------------------
 habits_draw:
+    call ui_size_gate           ; Terminal dimension check gate (Task 9)
     save_regs
 
     ; -------------------------------------------------------------------------

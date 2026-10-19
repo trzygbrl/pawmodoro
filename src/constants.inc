@@ -197,13 +197,17 @@ UI_MENU_ROW_ITEM2       equ 9           ; Menu option 2 (Habits) row
 UI_MENU_ROW_ITEM3       equ 10          ; Menu option 3 (Journal) row
 UI_MENU_ROW_ITEM4       equ 11          ; Menu option 4 (Demo mode) row
 UI_MENU_ROW_ITEMQ       equ 12          ; Menu option Q (Quit) row
-UI_MENU_ROW_BOTTOM      equ 13          ; Bottom border row
-UI_MENU_ROW_BELOW       equ 14          ; Row below frame for erase_eos
+UI_MENU_ROW_STATUS      equ 13          ; Menu status / feedback message row
+UI_MENU_ROW_HELP        equ 14          ; Menu key help prompt row
+UI_MENU_ROW_BOTTOM      equ 15          ; Bottom border row
+UI_MENU_ROW_BELOW       equ 16          ; Row below frame for erase_eos
 
 ; Main Menu Column Coordinates
 UI_MENU_COL_CAT         equ 4           ; Cat ASCII art column
 UI_MENU_COL_TITLE       equ 14          ; Main title & tagline column
 UI_MENU_COL_CONTENT     equ 4           ; Dashboard and menu items column
+UI_MENU_COL_STATUS      equ 4           ; Menu status start column
+UI_MENU_COL_HELP        equ 4           ; Menu key help start column
 
 ; Stub Screen Row Coordinates
 UI_STUB_ROW_TOP         equ 1           ; Top border row
@@ -392,4 +396,41 @@ UI_JRN_COL_HELP         equ 4           ; Key help text column
 ; Keyboard Input Constants (Task 8 Additions)
 KEY_N                   equ 78          ; ASCII uppercase 'N' (New entry)
 KEY_V                   equ 86          ; ASCII uppercase 'V' (View recent)
+
+; =============================================================================
+; Task 9 Additions: Integration, Signals, Size Gate, and Status Styling
+; =============================================================================
+; Linux Signal Handling (PRD §4.1 FR-U5)
+SYS_SIGNAL              equ 48          ; Linux sys_signal system call number
+SIGHUP                  equ 1           ; Hangup detected on controlling terminal
+SIGINT                  equ 2           ; Interrupt from keyboard (Ctrl+C)
+SIGTERM                 equ 15          ; Termination signal
+EXIT_SIGNALED           equ 130         ; Standard exit code for SIGINT interruption (128 + 2)
+
+; System Error Codes (errno return values)
+ERR_EINTR               equ 4           ; Interrupted system call
+ERR_EAGAIN              equ 11          ; Resource temporarily unavailable
+
+; Terminal Window Size Query (PRD §4.1, ioctl TIOCGWINSZ)
+TIOCGWINSZ              equ 0x5413      ; ioctl request: get terminal window size
+WINSIZE_SIZE            equ 8           ; struct winsize size in bytes
+WINSIZE_OFF_ROWS        equ 0           ; Offset of ws_row (word) in struct winsize
+WINSIZE_OFF_COLS        equ 2           ; Offset of ws_col (word) in struct winsize
+TERM_MIN_COLS           equ 80          ; Minimum required terminal width in columns
+TERM_MIN_ROWS           equ 24          ; Minimum required terminal height in rows
+
+; UI Status Message Styling Identifiers (PRD §4.1, §5)
+STATUS_INFO             equ 0           ; Information style: bright yellow
+STATUS_OK               equ 1           ; Success style: bold green
+STATUS_ERR              equ 2           ; Error style: bold red
+
+; Timer Completion Frame Modes (Task 9 Additions, FR-T8)
+TIMER_FRAME_RUNNING     equ 0           ; Active/paused timer countdown frame
+TIMER_FRAME_BREAK_DONE  equ 1           ; Break completed naturally
+TIMER_FRAME_FOCUS_DONE  equ 2           ; Focus completed naturally (quick note prompt)
+TIMER_FRAME_NOTE_PROMPT equ 3           ; Note entry active prompt
+TIMER_FRAME_NOTE_RESULT equ 4           ; Note save result status message
+
+KEY_Y                   equ 89          ; ASCII uppercase 'Y'
+
 

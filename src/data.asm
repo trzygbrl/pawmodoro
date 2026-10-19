@@ -306,3 +306,47 @@ section .bss
     ; Table of up to 10 (start_ptr, length) pairs for recent entries (10 * 8 = 80 bytes)
     jrnl_lines:                 resd (JOURNAL_VIEW_LINES * 2)
 
+; =============================================================================
+; Task 9 Integration, Signals, Size Gate, and Status Data & Buffers
+; =============================================================================
+section .data
+
+    ; Timer Quick-Note & Completion Strings (PRD §4.2 FR-T8)
+    timer_msg_focus_prompt:     db "Focus complete! Add a quick note? (y/n)", CHAR_NULL
+    timer_msg_note_input:       db "Note (max 200, Enter alone cancels): ", CHAR_NULL
+    timer_msg_note_saved:       db "Note saved - press any key for a break.", CHAR_NULL
+
+    timer_help_focus_prompt:    db "[Y] Add note   [Any other key] Continue to break", CHAR_NULL
+    timer_help_break_done:      db "[Any key] Continue   [Q] Stop and go back", CHAR_NULL
+    timer_help_note_result:     db "[Any key] Continue to break", CHAR_NULL
+
+    ; Terminal Size Warning Strings (PRD §4.1, 80x24 Gate)
+    ui_msg_enlarge:             db "Please enlarge the terminal", CHAR_NULL
+    ui_msg_need_prefix:         db "(need 80x24, now ", CHAR_NULL
+    ui_msg_need_x:              db "x", CHAR_NULL
+    ui_msg_need_suffix:         db ")", CHAR_NULL
+
+    ; Main Menu Footer & Demo Status Strings (PRD §5)
+    menu_help:                  db "[1-4] Select an option   [Q] Quit", CHAR_NULL
+    menu_msg_demo_on:           db "Demo mode ON (10 s focus)", CHAR_NULL
+    menu_msg_demo_off:          db "Demo mode OFF", CHAR_NULL
+
+section .bss
+
+    ; Exit Recursion Guard (1 = app_exit in progress, prevents recursive flush errors)
+    app_exiting:                resd 1
+
+    ; Terminal Size Gate Structure and Cached Dimensions
+    winsize:                    resb WINSIZE_SIZE           ; 8 bytes {ws_row, ws_col, ws_xpixel, ws_ypixel}
+    term_cols:                  resd 1                      ; Cached terminal columns
+    term_rows:                  resd 1                      ; Cached terminal rows
+
+    ; Main Menu Status Message Pointer and Style
+    menu_msg:                   resd 1                      ; Pointer to status string (0 = none)
+    menu_msg_style:             resd 1                      ; STATUS_INFO, STATUS_OK, or STATUS_ERR
+
+    ; Timer Quick-Note Result Message Pointer and Style
+    timer_result_msg:           resd 1                      ; Pointer to result string
+    timer_result_style:         resd 1                      ; STATUS_OK or STATUS_ERR
+
+

@@ -39,8 +39,10 @@ stats_load:
     call file_load
 
     ; Validate bytes read: must be at least STATS_RECORD_SIZE (12)
+    test eax, eax
+    js .load_empty_state        ; Missing file or error (-1): treat as empty state
     cmp eax, STATS_RECORD_SIZE
-    jb .load_empty_state        ; Negative (-1) or < 12 bytes: treat as empty state (FR-D1)
+    jb .load_empty_state        ; Short file (< 12 bytes): treat as empty state (FR-D1)
 
     ; File read succeeded: check day rollover (FR-D2)
     call time_today             ; EAX = current local day number
