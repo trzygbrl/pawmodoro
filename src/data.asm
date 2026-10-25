@@ -25,6 +25,29 @@ section .data
     ansi_bold:              db CHAR_ESC, "[1m", CHAR_NULL       ; Enable bold font weight
     ansi_reverse:           db CHAR_ESC, "[7m", CHAR_NULL       ; Enable reverse video (highlighting)
     ansi_bell:              db CHAR_BELL, CHAR_NULL             ; Terminal audio bell (0x07)
+    ansi_csi:               db CHAR_ESC, "[", CHAR_NULL         ; Control Sequence Introducer (CSI)
+
+    ; -------------------------------------------------------------------------
+    ; G1 Rendering Core State & Diagnostics (PRD_V3 §4.2, §5.1, §7.2, §10)
+    ; -------------------------------------------------------------------------
+    global gfx_overflow
+    global gfx_frame_bytes
+    global gfx_fg
+    global gfx_bg
+    global term_has_ech
+
+    gfx_overflow:           dd 0            ; Output buffer overflow flag (0=ok, 1=overflow)
+    gfx_frame_bytes:        dd 0            ; Transmitted byte count of most recent frame
+    gfx_fg:                 dw GFX_SLOT_UNKNOWN ; Current tracked foreground theme-slot ID
+    gfx_bg:                 dw GFX_SLOT_UNKNOWN ; Current tracked background theme-slot ID
+    term_has_ech:           dd 1            ; Terminal ECH capability flag (1=supported, 0=fallback)
+
+    ; G1 Demo & Diagnostic Strings
+    gfx_demo_title:         db "Pawmodoro v3 G1 Render Core Demo", CHAR_NULL
+    gfx_demo_subtitle:      db "Primitives: fill_screen_bg, fill_rect, hline, vline, text_clip", CHAR_NULL
+    gfx_demo_long:          db "This is a very long string designed to test display column clipping to 20 cols", CHAR_NULL
+    gfx_demo_hint:          db "Press any key to return to Main Menu...", CHAR_NULL
+    str_flag_test_overflow: db "--test-overflow", CHAR_NULL
 
     ; -------------------------------------------------------------------------
     ; 16-Color Terminal Foreground Sequences (PRD §3.3)
@@ -55,7 +78,7 @@ section .data
 section .bss
 
     ; Output aggregation frame buffer and length tracker
-    out_buf:                resb OUT_BUF_SIZE           ; 8192 bytes
+    out_buf:                resb OUT_BUF_SIZE           ; 16384 bytes
     out_len:                resd 1                      ; Bytes currently written to out_buf
 
     ; Terminal & Line input buffers

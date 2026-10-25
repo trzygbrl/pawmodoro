@@ -14,22 +14,26 @@
 ; Procedure: buf_char
 ; Purpose:   Stores byte AL into out_buf at index out_len, advancing out_len.
 ;            Overflow Protection: If out_len has reached OUT_BUF_SIZE, the byte
-;            is silently discarded to prevent buffer overrun and memory corruption.
+;            is safely discarded, gfx_overflow is set to 1, and the function
+;            returns without memory overrun or pointer corruption (PRD_V3 §4.2).
 ; IN:        AL = ASCII byte / character to append
-; OUT:       None (appends byte to out_buf)
+; OUT:       None (appends byte to out_buf, or sets gfx_overflow=1 on drop)
 ; CLOBBERS:  None (preserves all)
 ;=============================================================================
 buf_char:
     push ecx
     mov ecx, [out_len]
     cmp ecx, OUT_BUF_SIZE
-    jae .overflow_drop          ; Silently drop byte if buffer is at capacity
+    jae .overflow_drop          ; Safely drop byte if buffer is at capacity
 
     mov [out_buf + ecx], al     ; Store character at current write offset
     inc ecx
     mov [out_len], ecx          ; Update length tracker
+    pop ecx
+    ret
 
 .overflow_drop:
+    mov dword [gfx_overflow], 1 ; Flag buffer overflow diagnostic (PRD_V3 §4.2)
     pop ecx
     ret
 
@@ -299,9 +303,10 @@ buf_goto:
 ; Purpose:   Flushes out_buf[0..out_len) to file descriptor 1 (STDOUT) in a
 ;            single sys_write call. If out_len is 0, returns immediately.
 ;            Handles partial writes by looping and retries on -ERR_EINTR.
+;            Records out_len into gfx_frame_bytes before write (PRD_V3 §10).
 ;            Unconditionally resets out_len to 0 upon completion.
 ; IN:        None
-; OUT:       None (single sys_write flushes out_buf, resets out_len index)
+; OUT:       None (single sys_write flushes out_buf, resets out_len, updates gfx_frame_bytes)
 ; CLOBBERS:  None (preserves all)
 ;=============================================================================
 buf_flush:
@@ -313,6 +318,7 @@ buf_flush:
     push eax
 
     mov edx, [out_len]
+    mov [gfx_frame_bytes], edx  ; Record actual frame byte count (PRD_V3 §10)
     test edx, edx
     jz .flush_done              ; Zero bytes buffered: do not perform syscall
 

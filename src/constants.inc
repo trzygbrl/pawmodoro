@@ -98,10 +98,19 @@ KEY_HOME                equ 0x107       ; Home (ESC [ H / ESC O H / ESC [ 1 ~)
 KEY_END                 equ 0x108       ; End (ESC [ F / ESC O F / ESC [ 4 ~)
 KEY_DELETE              equ 0x109       ; Delete (ESC [ 3 ~)
 
+CHAR_UPPER_X           equ 88          ; Uppercase letter X ('X', for ANSI ECH sequence ESC[<n>X)
+KEY_CTRL_G              equ 7           ; ASCII 7 (BEL / Ctrl+G, temporary G1 demo key)
+GFX_SLOT_UNKNOWN        equ 0xFFFF      ; Sentinel value for untracked/unknown color slot ID
+
+; G1 Rendering Core Demo Toggle (Assembly-time switch, PRD_V3 §11)
+%ifndef G1_DEMO_ENABLED
+%define G1_DEMO_ENABLED 1
+%endif
+
 ; =============================================================================
-; Memory Buffer Sizes (.bss Budget, PRD §6.5)
+; Memory Buffer Sizes (.bss Budget, PRD §6.5, PRD_V3 §4.1)
 ; =============================================================================
-OUT_BUF_SIZE            equ 8192        ; Terminal output frame buffer size
+OUT_BUF_SIZE            equ 16384       ; Terminal output frame buffer size (increased from 8192 for v3)
 IN_BUF_SIZE             equ 16          ; Raw keyboard input buffer size
 LINE_BUF_SIZE           equ 256         ; Line input editing buffer size
 FILE_BUF_SIZE           equ 512         ; File persistence I/O buffer size

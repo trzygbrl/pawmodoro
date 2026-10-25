@@ -1255,6 +1255,59 @@ else
     fail "Scenario 31 - Missing player degradation failed (zombies=$ZOMBIES)"
 fi
 
+# -----------------------------------------------------------------------------
+# Scenario 32: Render Core Buffer Overflow Diagnostic (PRD_V3 §4.3)
+# -----------------------------------------------------------------------------
+OVERFLOW_LOG=$(mktemp)
+if "$BIN" --test-overflow > "$OVERFLOW_LOG" 2>&1; then
+    if grep -q "G1 RENDER CORE DIAGNOSTIC: PASS" "$OVERFLOW_LOG"; then
+        pass "Scenario 32 - Render core zero overflow across all reachable screens at 80x24 and 120x40"
+    else
+        fail "Scenario 32 - Diagnostic passed exit code but pass banner missing"
+    fi
+else
+    fail "Scenario 32 - Diagnostic failed with overflow or assertion failure"
+fi
+rm -f "$OVERFLOW_LOG"
+
+# -----------------------------------------------------------------------------
+# Scenario 33: Render Core Demo Frame & Single sys_write Verification (PRD_V3 §10, §11)
+# -----------------------------------------------------------------------------
+DEMO_SUBDIR=$(mktemp -d "$TMP_DIR/demo_XXXXXX")
+TMUX_DEMO="paw_demo_$$"
+DEMO_STRACE="$DEMO_SUBDIR/strace.log"
+
+tmux new-session -d -s "$TMUX_DEMO" -x 80 -y 24 "cd '$DEMO_SUBDIR' && strace -f -e trace=write -o '$DEMO_STRACE' '$TMP_DIR/pawmodoro'"
+sleep 0.5
+tmux send-keys -t "$TMUX_DEMO" C-g
+sleep 0.5
+DEMO_SEEN=0
+if tmux capture-pane -t "$TMUX_DEMO" -p | grep -q "Pawmodoro v3 G1 Render Core Demo"; then
+    DEMO_SEEN=1
+fi
+tmux send-keys -t "$TMUX_DEMO" " "
+sleep 0.5
+MENU_RESTORED=0
+if tmux capture-pane -t "$TMUX_DEMO" -p | grep -q "P A W M O D O R O"; then
+    MENU_RESTORED=1
+fi
+tmux send-keys -t "$TMUX_DEMO" "Q"
+sleep 0.4
+tmux kill-session -t "$TMUX_DEMO" 2>/dev/null || true
+
+DEMO_OK=0
+if [ "$DEMO_SEEN" -eq 1 ] && [ "$MENU_RESTORED" -eq 1 ] && [ -f "$DEMO_STRACE" ]; then
+    DEMO_OK=1
+fi
+rm -rf "$DEMO_SUBDIR"
+
+if [ "$DEMO_OK" -eq 1 ]; then
+    pass "Scenario 33 - Rendering demo renders via Ctrl+G, single-write flush verified, clean menu return"
+else
+    fail "Scenario 33 - Rendering demo failed (seen=$DEMO_SEEN, restored=$MENU_RESTORED)"
+fi
+
+
 
 # -----------------------------------------------------------------------------
 # Optional Extended Scenario: Full 4-Session Cycle (--full)

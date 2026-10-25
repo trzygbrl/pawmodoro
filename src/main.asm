@@ -33,7 +33,9 @@ section .text
 %include "src/journal.asm"
 %include "src/anim.asm"
 %include "src/sfx.asm"
+%include "src/gfx.asm"
 
+section .text
     global _start
 
 ;=============================================================================
@@ -47,6 +49,28 @@ section .text
 ; CLOBBERS:  EAX, EBX, ECX, EDX, ESI, EDI (registers discarded on process exit)
 ;=============================================================================
 _start:
+    ; Check command-line arguments for diagnostic mode (--test-overflow)
+    mov eax, [esp]              ; EAX = argc
+    cmp eax, 2
+    jl .start_normal
+    mov esi, [esp + 8]          ; ESI = argv[1]
+    mov edi, str_flag_test_overflow
+.check_diag_loop:
+    mov al, [esi]
+    mov bl, [edi]
+    cmp al, bl
+    jne .start_normal
+    test al, al
+    jz .run_overflow_diag
+    inc esi
+    inc edi
+    jmp .check_diag_loop
+
+.run_overflow_diag:
+    call settings_load          ; Initialize active_palette
+    call gfx_diag_run_all       ; Runs headless diagnostics and terminates via sys_exit
+
+.start_normal:
     ; Capture environment pointer (envp) from initial process stack (PRD_V2 §9)
     mov eax, [esp]              ; EAX = argc
     lea edx, [esp + 8 + eax*4]  ; EDX = envp pointer
@@ -180,8 +204,25 @@ _start:
     cmp eax, KEY_5
     je .menu_to_settings
 
+%ifdef G1_DEMO_ENABLED
+    ; Ctrl+G -> Enter temporary G1 rendering demo (PRD_V3 §11)
+    cmp eax, KEY_CTRL_G
+    je .menu_to_g1_demo
+%endif
+
     ; Any other key is ignored: no redraw, no write!
     jmp .main_loop
+
+%ifdef G1_DEMO_ENABLED
+.menu_to_g1_demo:
+    call anim_reset_effects
+    call gfx_run_demo
+    cmp dword [state], STATE_QUIT
+    je .handle_exit
+    mov dword [state], STATE_MENU
+    mov dword [need_redraw], 1
+    jmp .main_loop
+%endif
 
 .menu_to_settings:
     call anim_reset_effects
