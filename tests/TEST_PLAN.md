@@ -136,6 +136,16 @@ For manual test cases:
 | TC-70 | Terminal size gate (< 80x24) animation freeze (PRD v2 §2, §8) | O4, O5 | Terminal resized to 70x20 | 1. Resize during active animation | Dimension gate screen displayed; all animation simulation, drawing, and flushes completely suspended. | | |
 | TC-71 | Single sys_write per composed partial redraw frame (PRD v2 §8, FR-V30) | O4, O5 | Multiple dirty animation regions | 1. Run under `strace -e trace=write` during menu/timer animation | Exactly one `sys_write` emitted per composed animation frame, aggregating all dirty regions. | | |
 | TC-72 | Timer pause freezes animation without blocking input (PRD v2 §8) | O1, O5 | Timer running | 1. Press `P` to pause timer | Countdown and timer animation freeze. Key handling remains responsive; resuming unfreezes animation. | | |
+| TC-73 | Integer phase accumulator note synthesis sample count (PRD v2 §9, FR-V33) | O4, O5 | Pure integer environment | 1. Invoke `synth_note` with 1ms, 100ms, and 500ms durations | Produces exact sample counts: 11 samples for 1ms, 1102 samples for 100ms, 5512 samples for 500ms at 11025 Hz U8 mono PCM. | | |
+| TC-74 | Waveform generation and 8-bit unsigned clamping (PRD v2 §9, FR-V33) | O4, O5 | Bounded PCM buffer | 1. Synthesize square and triangle waveforms | Samples remain within unsigned 8-bit range [0, 255] centered at 128. Square and triangle wave samples differ demonstrably. | | |
+| TC-75 | Linear decay envelope and volume scaling (PRD v2 §9, FR-V33) | O4, O5 | Notes synthesized at volume 0..3 | 1. Compare early vs late note samples<br>2. Compare amplitudes across volume settings | Linear envelope scales amplitude toward silence (128) near note end. Volume 0 produces digital silence (all samples 128). | | |
+| TC-76 | Rest note synthesis (PRD v2 §9) | O4, O5 | Rest step `WAVE_REST` | 1. Synthesize rest note for 50ms | Exactly 551 samples generated, all having value 128 (PCM_CENTER). Buffer advances without tone generation. | | |
+| TC-77 | External player probe precedence (PRD v2 §9, FR-V34) | O4, O5 | System with paplay or aplay | 1. Call `sfx_init` | Probes `/usr/bin/paplay` with `sys_access` mode 1 (`X_OK`); if absent, probes `/usr/bin/aplay`. Caches selected player type. | | |
+| TC-78 | Missing audio player graceful startup and silence (PRD v2 §9, FR-V35) | O4, O5 | System without paplay or aplay | 1. Run `./build/pawmodoro` | Application starts cleanly with zero error diagnostics and zero exit status issues. | | |
+| TC-79 | Terminal bell fallback policy for important events (PRD v2 §9, FR-V35) | O4, O5 | Player absent, sound enabled | 1. Trigger timer start, focus completion, break completion<br>2. Trigger clicks, check-ins, journal actions | Important events emit terminal bell byte (`0x07`). Noncritical events remain completely quiet. | | |
+| TC-80 | Sound disabled and volume zero complete silence (PRD v2 §9, FR-V33) | O4, O5 | Settings `sound=0` or `volume=0` | 1. Trigger timer completion and check-ins | Zero audio processes spawned, zero bell characters emitted, zero audio writes. | | |
+| TC-81 | Non-blocking pipe and process lifecycle (PRD v2 §9, FR-V34, FR-V36) | O1, O4 | Player process launched | 1. Monitor timer tick loop during audio playback | Parent writes 32 KB payload in single write and closes descriptors immediately without `waitpid`. Timer loop remains 100ms responsive. `SIGPIPE` ignored. | | |
+| TC-82 | Player termination and zombie prevention (PRD v2 §9, FR-V35, FR-V36) | O4, O5 | Repeated playback events | 1. Trigger 10 sound effects<br>2. Inspect process table | `SIGCHLD` set to `SIG_IGN` causes Linux kernel to auto-reap terminated player processes. `ps axo stat | grep Z` reports 0 zombies. | | |
 
 ---
 
@@ -166,4 +176,5 @@ The automated smoke test script (`tests/smoke.sh`) provides headless regression 
 | Check 19: Strict 7-bit ASCII Fallback (Zero Bytes >= 0x80 across 5 Screens) | TC-59 |
 | Check 20: UTF-8 Rounded Border Geometry (╭, ╰, ─, │ across 5 Screens) | TC-60 |
 | Check 21: Animation Write Throttling (<= 5 fps) & Reduce Motion 0 Idle Writes | TC-61, TC-69, TC-71 |
+| Check 22: Synthesized Sound Engine, Pure Integer Purity, .bss Budget, Zero Zombies | TC-73, TC-74, TC-75, TC-80, TC-81, TC-82 |
 | Extended (`--full`): 4-Session Pomodoro Cycle | TC-20 |

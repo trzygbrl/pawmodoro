@@ -32,6 +32,7 @@ section .text
 %include "src/habits.asm"
 %include "src/journal.asm"
 %include "src/anim.asm"
+%include "src/sfx.asm"
 
     global _start
 
@@ -46,6 +47,11 @@ section .text
 ; CLOBBERS:  EAX, EBX, ECX, EDX, ESI, EDI (registers discarded on process exit)
 ;=============================================================================
 _start:
+    ; Capture environment pointer (envp) from initial process stack (PRD_V2 §9)
+    mov eax, [esp]              ; EAX = argc
+    lea edx, [esp + 8 + eax*4]  ; EDX = envp pointer
+    mov [sfx_envp], edx
+
     ; -------------------------------------------------------------------------
     ; Step 1: Terminal Initialization & State Setup (FR-U1, FR-U5)
     ; -------------------------------------------------------------------------
@@ -53,6 +59,7 @@ _start:
     call term_install_signals   ; Install SIGHUP, SIGINT, SIGTERM signal handlers (Task 9)
     call term_raw               ; Configure non-canonical, non-blocking raw mode
     call settings_load          ; Load persisted settings.dat & initialize theme palette (Task V4)
+    call sfx_init               ; Initialize sound engine & probe audio players (Task V8)
     call stats_load             ; Load persisted stats.dat into memory & sync dashboard (FR-U7, FR-D2)
     call habits_load            ; Load persisted habits.dat into memory & sync dashboard (FR-U7, FR-D3)
     call dashboard_refresh      ; Initialize live dashboard values in memory (Task 9)

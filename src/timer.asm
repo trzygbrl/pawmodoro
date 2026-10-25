@@ -537,6 +537,10 @@ timer_run:
     mov dword [session_no], 1
     mov dword [focus_completed_flag], 0
 
+    ; Play timer start chirp sound effect (Task V8)
+    mov eax, SFX_START_CHIRP
+    call sfx_play
+
 .phase_entry:
     call timer_phase_start
 
@@ -648,12 +652,14 @@ timer_run:
     call stats_add_pomodoro
     call anim_on_focus_complete ; Trigger confetti burst only on natural focus complete (Task V7)
 
-    ; Render focus completion frame (mode 2) with bell in a single write
+    ; Render focus completion frame (mode 2) in a single write
     mov eax, TIMER_FRAME_FOCUS_DONE
     call timer_draw
-    mov esi, ansi_bell
-    call buf_str
     call buf_flush
+
+    ; Play focus-complete fanfare (Task V8)
+    mov eax, SFX_FOCUS_FANFARE
+    call sfx_play
 
 .focus_wait_decision:
     ; Wait for user decision while continuing animation tick
@@ -704,11 +710,15 @@ timer_run:
     ; Note saved successfully
     mov dword [timer_result_msg], timer_msg_note_saved
     mov dword [timer_result_style], STATUS_OK
+    mov eax, SFX_CLICK
+    call sfx_play
     jmp .show_note_feedback
 
 .note_save_error:
     mov dword [timer_result_msg], err_could_not_save
     mov dword [timer_result_style], STATUS_ERR
+    mov eax, SFX_ERROR_BOOP
+    call sfx_play
 
 .show_note_feedback:
     ; Redraw completion frame with feedback message (mode 4)
@@ -728,9 +738,11 @@ timer_run:
     call anim_reset_effects
     mov eax, TIMER_FRAME_BREAK_DONE
     call timer_draw
-    mov esi, ansi_bell
-    call buf_str
     call buf_flush
+
+    ; Play break chime (Task V8)
+    mov eax, SFX_BREAK_CHIME
+    call sfx_play
 
 .break_wait_decision:
     ; Wait for user input while ticking animation

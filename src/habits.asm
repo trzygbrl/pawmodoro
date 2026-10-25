@@ -646,6 +646,8 @@ habits_check_in:
 
     ; Save failed: flag error for display (FR-D4)
     mov dword [habit_msg], err_could_not_save
+    mov eax, SFX_ERROR_BOOP
+    call sfx_play
     jmp .chk_finish
 
 .chk_save_ok:
@@ -653,6 +655,8 @@ habits_check_in:
     mov eax, [esp]              ; Key code (KEY_1..KEY_8)
     sub eax, KEY_1              ; EAX = 0-based habit index (0..7)
     call anim_on_habit_checkin  ; Trigger heart-pop on successful check-in (Task V7)
+    mov eax, SFX_CHECKIN_SPARKLE ; Play check-in sparkle sound (Task V8)
+    call sfx_play
     jmp .chk_finish
 
 .chk_already_done:

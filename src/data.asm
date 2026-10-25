@@ -693,3 +693,143 @@ section .bss
     heart_pop_old_x:            resd 1          ; Old column (for erasing)
     heart_pop_old_y:            resd 1          ; Old row (for erasing)
     heart_pop_life:             resd 1          ; Remaining lifetime
+
+; =============================================================================
+; Task V8 Additions: Synthesized Sound Effects Engine (PRD_V2 §9, §12)
+; =============================================================================
+section .data
+
+    ; Audio player executable paths and command-line arguments
+    paplay_path:                db "/usr/bin/paplay", CHAR_NULL
+    paplay_arg0:                db "paplay", CHAR_NULL
+    paplay_arg1:                db "--raw", CHAR_NULL
+    paplay_arg2:                db "--format=u8", CHAR_NULL
+    paplay_arg3:                db "--rate=11025", CHAR_NULL
+    paplay_arg4:                db "--channels=1", CHAR_NULL
+
+    paplay_argv:
+        dd paplay_arg0
+        dd paplay_arg1
+        dd paplay_arg2
+        dd paplay_arg3
+        dd paplay_arg4
+        dd 0
+
+    aplay_path:                 db "/usr/bin/aplay", CHAR_NULL
+    aplay_arg0:                 db "aplay", CHAR_NULL
+    aplay_arg1:                 db "-q", CHAR_NULL
+    aplay_arg2:                 db "-t", CHAR_NULL
+    aplay_arg3:                 db "raw", CHAR_NULL
+    aplay_arg4:                 db "-f", CHAR_NULL
+    aplay_arg5:                 db "U8", CHAR_NULL
+    aplay_arg6:                 db "-r", CHAR_NULL
+    aplay_arg7:                 db "11025", CHAR_NULL
+    aplay_arg8:                 db "-c", CHAR_NULL
+    aplay_arg9:                 db "1", CHAR_NULL
+
+    aplay_argv:
+        dd aplay_arg0
+        dd aplay_arg1
+        dd aplay_arg2
+        dd aplay_arg3
+        dd aplay_arg4
+        dd aplay_arg5
+        dd aplay_arg6
+        dd aplay_arg7
+        dd aplay_arg8
+        dd aplay_arg9
+        dd 0
+
+    dev_null_path:              db "/dev/null", CHAR_NULL
+    sfx_default_envp:           dd 0
+    sfx_bell_char:              db CHAR_BELL
+
+    ; Volume scaling lookup table (indexed by setting_volume: 0..3)
+    ; 0: muted (0), 1: 25% (30), 2: 50% (65), 3: 100% (110)
+    sfx_volume_table:           db 0, 30, 65, 110
+
+    ; Sound Step Tables for Synthesizer Engine (PRD_V2 §9)
+    ; Format per step:
+    ;   dd frequency_hz     ; Frequency in Hz (0 = rest/silent)
+    ;   dd duration_ms      ; Duration in milliseconds
+    ;   dd waveform_id      ; WAVE_SQUARE, WAVE_TRIANGLE, or WAVE_REST
+    ; Sentinel: dd 0, 0, 0
+    sfx_seq_start_chirp:
+        dd 587, 40, WAVE_TRIANGLE
+        dd 880, 60, WAVE_TRIANGLE
+        dd 0, 0, 0
+
+    sfx_seq_click:
+        dd 1200, 12, WAVE_SQUARE
+        dd 0, 0, 0
+
+    sfx_seq_checkin_sparkle:
+        dd 523, 50, WAVE_TRIANGLE
+        dd 659, 50, WAVE_TRIANGLE
+        dd 784, 50, WAVE_TRIANGLE
+        dd 1046, 80, WAVE_TRIANGLE
+        dd 0, 0, 0
+
+    sfx_seq_focus_fanfare:
+        dd 392, 80, WAVE_TRIANGLE
+        dd 523, 80, WAVE_TRIANGLE
+        dd 659, 80, WAVE_TRIANGLE
+        dd 784, 120, WAVE_TRIANGLE
+        dd 0, 30, WAVE_REST
+        dd 659, 60, WAVE_TRIANGLE
+        dd 784, 200, WAVE_TRIANGLE
+        dd 0, 0, 0
+
+    sfx_seq_break_chime:
+        dd 659, 70, WAVE_TRIANGLE
+        dd 0, 20, WAVE_REST
+        dd 988, 140, WAVE_TRIANGLE
+        dd 0, 0, 0
+
+    sfx_seq_error_boop:
+        dd 180, 80, WAVE_SQUARE
+        dd 0, 20, WAVE_REST
+        dd 140, 120, WAVE_SQUARE
+        dd 0, 0, 0
+
+    sfx_seq_delete_blip:
+        dd 880, 35, WAVE_SQUARE
+        dd 440, 45, WAVE_SQUARE
+        dd 220, 55, WAVE_SQUARE
+        dd 0, 0, 0
+
+    sfx_seq_short_meow:
+        dd 450, 30, WAVE_TRIANGLE
+        dd 520, 30, WAVE_TRIANGLE
+        dd 620, 35, WAVE_TRIANGLE
+        dd 740, 40, WAVE_TRIANGLE
+        dd 850, 45, WAVE_TRIANGLE
+        dd 880, 30, WAVE_TRIANGLE
+        dd 840, 30, WAVE_TRIANGLE
+        dd 890, 30, WAVE_TRIANGLE
+        dd 830, 30, WAVE_TRIANGLE
+        dd 760, 35, WAVE_TRIANGLE
+        dd 680, 35, WAVE_TRIANGLE
+        dd 580, 40, WAVE_TRIANGLE
+        dd 480, 50, WAVE_TRIANGLE
+        dd 0, 0, 0
+
+    sfx_table:
+        dd 0
+        dd sfx_seq_start_chirp
+        dd sfx_seq_click
+        dd sfx_seq_checkin_sparkle
+        dd sfx_seq_focus_fanfare
+        dd sfx_seq_break_chime
+        dd sfx_seq_error_boop
+        dd sfx_seq_delete_blip
+        dd sfx_seq_short_meow
+
+section .bss
+
+    ; Task V8: Sound Engine State & 32 KB PCM Buffer (PRD_V2 §9, §12)
+    sfx_envp:                   resd 1          ; Inherited environment pointer
+    sfx_player_choice:          resd 1          ; PLAYER_NONE, PLAYER_PAPLAY, or PLAYER_APLAY
+    sfx_pipe_fds:               resd 2          ; Pipe fds: [0]=read, [1]=write
+    sfx_buf_len:                resd 1          ; Valid PCM bytes currently in sfx_buf
+    sfx_buf:                    resb SFX_BUF_SIZE ; 32 KB unsigned 8-bit mono PCM buffer

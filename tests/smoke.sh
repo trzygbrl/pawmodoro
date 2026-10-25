@@ -725,6 +725,22 @@ else
     fail "Scenario 21 - Failed to start Pawmodoro for animation rate check"
 fi
 
+# -----------------------------------------------------------------------------
+# Scenario 22: Synthesized Sound Engine & Process Lifecycle (Task V8)
+# -----------------------------------------------------------------------------
+# 1. Verify integer-only math: zero FPU, MMX, SSE instructions in binary
+FPU_CHECK=$(objdump -d "$BIN" | grep -E '\bfld|\bfst|\bfadd|\bfsub|\bfmul|\bfdiv|\bxmm|\bymm|\bzmm' || true)
+# 2. Verify .bss budget: <= 81920 B (80 KiB)
+BSS_SIZE=$(size -A "$BIN" | awk '$1==".bss"{print $2}')
+# 3. Verify zero zombie processes in system
+ZOMBIES_COUNT=$(ps axo stat | grep -c 'Z' || true)
+
+if [ -z "$FPU_CHECK" ] && [ -n "$BSS_SIZE" ] && [ "$BSS_SIZE" -le 81920 ] && [ "$ZOMBIES_COUNT" -eq 0 ]; then
+    pass "Scenario 22 - Pure integer synthesis, .bss size ($BSS_SIZE <= 81920 B), and zero zombie processes"
+else
+    fail "Scenario 22 - Sound engine verification failed (fpu=$FPU_CHECK, bss=$BSS_SIZE, zombies=$ZOMBIES_COUNT)"
+fi
+
 
 # -----------------------------------------------------------------------------
 # Optional Extended Scenario: Full 4-Session Cycle (--full)

@@ -621,3 +621,52 @@ PARTICLE_OFF_ACTIVE     equ 28          ; 1 = active, 0 = inactive (dword)
 PARTICLE_OFF_GLYPH      equ 32          ; Glyph ID: GLYPH_STAR.. (dword)
 PARTICLE_OFF_SLOT       equ 36          ; Color slot ID (dword)
 PARTICLE_SIZE           equ 40          ; 40 bytes per particle struct
+
+; =============================================================================
+; Task V8 Additions: Synthesized Sound Effects Engine (PRD_V2 §9, §11, §13.5)
+; =============================================================================
+; Linux Syscalls for Sound Engine Process & Pipe Lifecycle (PRD_V2 §11)
+SYS_FORK                equ 2           ; Create child process for audio playback
+SYS_EXECVE              equ 11          ; Execute external audio player
+SYS_ACCESS              equ 33          ; Check file accessibility (probe player)
+SYS_PIPE                equ 42          ; Create unidirectional data channel
+SYS_DUP2                equ 63          ; Duplicate a file descriptor
+
+; sys_access check mode
+X_OK                    equ 1           ; Test for execute permission
+
+; POSIX Signal Numbers and Dispositions (PRD_V2 §9)
+SIGPIPE                 equ 13          ; Broken pipe: write to pipe with no readers
+SIGCHLD                 equ 17          ; Child stopped or terminated
+SIG_IGN                 equ 1           ; Ignore signal disposition
+
+; Audio Synthesis & Format Constants (PRD_V2 §9)
+AUDIO_SAMPLE_RATE       equ 11025       ; 11025 Hz sample rate
+AUDIO_CHANNELS          equ 1           ; Mono (1 channel)
+AUDIO_BYTES_PER_SAMPLE  equ 1           ; 8-bit unsigned PCM
+SFX_BUF_SIZE            equ 32768       ; 32 KB PCM buffer in .bss (~2.97 seconds)
+PCM_CENTER              equ 128         ; Digital silence / center for unsigned 8-bit PCM
+PCM_MIN                 equ 0           ; Minimum 8-bit PCM value
+PCM_MAX                 equ 255         ; Maximum 8-bit PCM value
+
+; Waveform Type Identifiers
+WAVE_SQUARE             equ 0           ; Square waveform
+WAVE_TRIANGLE           equ 1           ; Triangle waveform
+WAVE_REST               equ 2           ; Rest (silence at center 128)
+
+; Sound Effect Identifiers
+SFX_NONE                equ 0           ; No sound effect
+SFX_START_CHIRP         equ 1           ; Short rising chirp (timer start)
+SFX_CLICK               equ 2           ; Short subtle square-wave click
+SFX_CHECKIN_SPARKLE     equ 3           ; Four-note C-E-G-C arpeggio (habit check-in)
+SFX_FOCUS_FANFARE       equ 4           ; Celebratory sequence (focus completion)
+SFX_BREAK_CHIME         equ 5           ; Soft chime (break transition/completion)
+SFX_ERROR_BOOP          equ 6           ; Short low-pitched sound (recoverable error)
+SFX_DELETE_BLIP         equ 7           ; Short descending blip (journal delete)
+SFX_SHORT_MEOW          equ 8           ; Cat pitch glide with vibrato
+SFX_COUNT               equ 8           ; Total distinct sound effects
+
+; Audio Player Types (probed via sys_access at startup)
+PLAYER_NONE             equ 0           ; No working player detected (use bell fallback)
+PLAYER_PAPLAY           equ 1           ; PulseAudio paplay (/usr/bin/paplay)
+PLAYER_APLAY            equ 2           ; ALSA aplay (/usr/bin/aplay)

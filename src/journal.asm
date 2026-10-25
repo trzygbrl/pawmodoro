@@ -1300,6 +1300,8 @@ journal_delete_prompt:
     ; Delete succeeded!
     mov dword [jrnl_msg], jrnl_msg_deleted
     mov dword [jrnl_full_view], 0 ; Return to list if in full view
+    mov eax, SFX_DELETE_BLIP
+    call sfx_play
 
     ; Reload journal tail from disk
     call journal_load_tail
@@ -1324,6 +1326,8 @@ journal_delete_prompt:
 
 .del_failed:
     mov dword [jrnl_msg], jrnl_msg_could_not_delete
+    mov eax, SFX_ERROR_BOOP
+    call sfx_play
     jmp .del_prompt_done
 
 .del_ctrl_c:
@@ -1382,6 +1386,8 @@ journal_new_entry:
     ; Save succeeded: show confirmation message
     mov dword [jrnl_msg], jrnl_msg_saved
     mov dword [jrnl_full_view], 0
+    mov eax, SFX_CLICK
+    call sfx_play
 
     ; Refresh view to immediately display new entry
     call journal_load_tail
@@ -1396,6 +1402,8 @@ journal_new_entry:
 
 .new_failed:
     mov dword [jrnl_msg], err_could_not_save
+    mov eax, SFX_ERROR_BOOP
+    call sfx_play
     jmp .new_finish
 
 .new_canceled:
