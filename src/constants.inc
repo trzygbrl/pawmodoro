@@ -66,6 +66,8 @@ CHAR_SEMICOLON          equ 59          ; Semicolon symbol (';')
 CHAR_LBRACKET           equ 91          ; Left square bracket ('[')
 CHAR_UPPER_H            equ 72          ; Uppercase letter H ('H')
 CHAR_PIPE               equ 124         ; Vertical bar / pipe symbol ('|')
+CHAR_TILDE              equ 126         ; Tilde symbol ('~', 0x7E)
+CHAR_UPPER_O            equ 79          ; Uppercase letter O ('O')
 
 KEY_CTRL_C              equ 3           ; ASCII 3 (ETX / Ctrl+C)
 KEY_BACKSPACE           equ 127         ; Backspace / Delete
@@ -73,6 +75,20 @@ KEY_ENTER               equ 10          ; Enter / Line Feed
 KEY_ESC                 equ 27          ; Escape key
 KEY_SPACE               equ 32          ; Spacebar key
 KEY_NONE                equ -1          ; Sentinel value: no key available
+
+; =============================================================================
+; Extended Navigation Key Codes (Task V1, PRD_V2 §6)
+; Values are distinct integers above 255.
+; =============================================================================
+KEY_UP                  equ 0x101       ; Up arrow (ESC [ A / ESC O A)
+KEY_DOWN                equ 0x102       ; Down arrow (ESC [ B / ESC O B)
+KEY_RIGHT               equ 0x103       ; Right arrow (ESC [ C / ESC O C)
+KEY_LEFT                equ 0x104       ; Left arrow (ESC [ D / ESC O D)
+KEY_PGUP                equ 0x105       ; Page Up (ESC [ 5 ~)
+KEY_PGDN                equ 0x106       ; Page Down (ESC [ 6 ~)
+KEY_HOME                equ 0x107       ; Home (ESC [ H / ESC O H / ESC [ 1 ~)
+KEY_END                 equ 0x108       ; End (ESC [ F / ESC O F / ESC [ 4 ~)
+KEY_DELETE              equ 0x109       ; Delete (ESC [ 3 ~)
 
 ; =============================================================================
 ; Memory Buffer Sizes (.bss Budget, PRD §6.5)
@@ -131,6 +147,7 @@ STATE_QUIT              equ 4           ; Application exit state
 ; Terminal & Key Processing Constants (Task 2 Additions)
 ; =============================================================================
 FD_STDERR               equ 2           ; Standard error file descriptor
+NANOSLEEP_5MS           equ 5000000     ; 5 ms in nanoseconds (for key_poll ESC grace period)
 NANOSLEEP_50MS          equ 50000000    ; 50 ms in nanoseconds (for key_wait polling)
 
 CHAR_LOWER_A            equ 97          ; ASCII lowercase 'a'

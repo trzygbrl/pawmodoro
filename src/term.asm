@@ -154,23 +154,33 @@ term_cooked:
 
 ;=============================================================================
 ; Procedure: key_poll
-; Purpose:   Reads a single byte from FD_STDIN without blocking.
+; Purpose:   Reads keyboard input from FD_STDIN non-blockingly.
 ;            - If no data is available (returns <= 0), returns KEY_NONE (-1).
 ;            - Lowercase letters ('a'..'z') are automatically converted to uppercase.
-;            - Lone ESC (byte 27 with no subsequent bytes) returns KEY_ESC (27).
-;            - Multi-byte escape sequences (such as arrow keys ESC [ A) are consumed
-;              and completely drained non-blockingly, returning KEY_NONE (-1) so
-;              no stray escape characters leak into subsequent polls.
+;            - Lone ESC (byte 27 with no subsequent bytes within ~5 ms) returns KEY_ESC (27).
+;            - Recognized CSI and SS3 escape sequences return extended key codes:
+;                ESC [ A / ESC O A -> KEY_UP (0x101)
+;                ESC [ B / ESC O B -> KEY_DOWN (0x102)
+;                ESC [ C / ESC O C -> KEY_RIGHT (0x103)
+;                ESC [ D / ESC O D -> KEY_LEFT (0x104)
+;                ESC [ 5 ~         -> KEY_PGUP (0x105)
+;                ESC [ 6 ~         -> KEY_PGDN (0x106)
+;                ESC [ H / ESC O H / ESC [ 1 ~ -> KEY_HOME (0x107)
+;                ESC [ F / ESC O F / ESC [ 4 ~ -> KEY_END (0x108)
+;                ESC [ 3 ~         -> KEY_DELETE (0x109)
+;            - Unknown or malformed escape sequences are consumed and drained
+;              up to their sequence terminator, returning KEY_NONE (-1) without
+;              leaking sequence bytes to the application.
 ;            - Ctrl+C is returned as KEY_CTRL_C (3).
-;            - Character code is returned zero-extended in EAX (0..255).
 ; IN:        None
-; OUT:       EAX = Uppercase key code or -1 (KEY_NONE); ignores escape sequences
+; OUT:       EAX = Uppercase ASCII key (0..255), extended key code (KEY_UP..KEY_DELETE),
+;                  or -1 (KEY_NONE)
 ; CLOBBERS:  EAX
 ;=============================================================================
 key_poll:
     save_regs
 
-    ; Attempt non-blocking 1-byte read from standard input
+    ; Step 1: Attempt non-blocking 1-byte read from standard input
     syscall SYS_READ, FD_STDIN, in_buf, 1
     cmp eax, 1
     je .poll_got_key            ; Exactly 1 byte read
@@ -204,24 +214,251 @@ key_poll:
     movzx eax, al               ; Zero-extend character byte into EAX
     jmp .poll_done
 
+; -----------------------------------------------------------------------------
+; Escape Sequence Handling
+; -----------------------------------------------------------------------------
 .poll_check_escape:
-    ; Probe non-blockingly for follow-up escape sequence bytes
+    ; Probe non-blockingly for follow-up escape sequence byte
     syscall SYS_READ, FD_STDIN, in_buf, 1
     cmp eax, 1
-    jne .poll_lone_esc          ; No subsequent bytes: user pressed lone Escape key
+    je .poll_got_byte2          ; Immediate follow-up byte available
 
-    ; Multi-byte escape sequence detected (e.g. arrow keys, function keys).
-    ; Drain all remaining bytes of the burst so nothing leaks into next poll.
-.poll_drain_esc_loop:
+    ; No byte immediately available: sleep ~5 ms grace period to prevent
+    ; slow or packet-fragmented escape sequences from misfiring as lone ESC
+    mov dword [timespec], 0
+    mov dword [timespec + 4], NANOSLEEP_5MS
+    syscall SYS_NANOSLEEP, timespec, 0
+
+    ; Re-check input once after 5 ms grace period
     syscall SYS_READ, FD_STDIN, in_buf, 1
     cmp eax, 1
-    je .poll_drain_esc_loop
+    je .poll_got_byte2
 
-    mov eax, KEY_NONE           ; Discard multi-byte escape sequences
+    ; Genuinely lone Escape key pressed by user
+    mov eax, KEY_ESC
     jmp .poll_done
 
-.poll_lone_esc:
-    mov eax, KEY_ESC
+.poll_got_byte2:
+    mov bl, byte [in_buf]       ; BL = second byte of escape sequence
+
+    cmp bl, CHAR_LBRACKET       ; '[' (0x5B = 91) -> CSI sequence
+    je .poll_parse_csi
+
+    cmp bl, CHAR_UPPER_O        ; 'O' (0x4F = 79) -> SS3 sequence
+    je .poll_parse_ss3
+
+    ; Any other byte after ESC (e.g. Alt+key or unsupported ESC prefix):
+    ; Consume it and return KEY_NONE (-1)
+    mov eax, KEY_NONE
+    jmp .poll_done
+
+; -----------------------------------------------------------------------------
+; Parse SS3 Sequences (ESC O <char>)
+; -----------------------------------------------------------------------------
+.poll_parse_ss3:
+    ; Read byte 3
+    syscall SYS_READ, FD_STDIN, in_buf, 1
+    cmp eax, 1
+    je .poll_check_ss3_byte3
+
+    ; Probe with 5 ms grace sleep if byte 3 is delayed
+    mov dword [timespec], 0
+    mov dword [timespec + 4], NANOSLEEP_5MS
+    syscall SYS_NANOSLEEP, timespec, 0
+    syscall SYS_READ, FD_STDIN, in_buf, 1
+    cmp eax, 1
+    jne .poll_discard_unknown   ; Incomplete sequence -> return -1
+
+.poll_check_ss3_byte3:
+    mov al, byte [in_buf]       ; AL = byte 3
+
+    cmp al, 'A'
+    je .poll_return_up
+    cmp al, 'B'
+    je .poll_return_down
+    cmp al, 'C'
+    je .poll_return_right
+    cmp al, 'D'
+    je .poll_return_left
+    cmp al, 'H'
+    je .poll_return_home
+    cmp al, 'F'
+    je .poll_return_end
+
+    ; Unsupported SS3 sequence: drain any immediate extra bytes and ignore
+    mov edi, 8
+.poll_drain_ss3_loop:
+    dec edi
+    jz .poll_discard_unknown
+    syscall SYS_READ, FD_STDIN, in_buf, 1
+    cmp eax, 1
+    je .poll_drain_ss3_loop
+    jmp .poll_discard_unknown
+
+; -----------------------------------------------------------------------------
+; Parse CSI Sequences (ESC [ ...)
+; Note: ESI and EDI are preserved across syscall invocations (syscall macro
+; clobbers EAX, EBX, ECX, EDX). ESI stores byte 3; EDI bounds drain iterations.
+; -----------------------------------------------------------------------------
+.poll_parse_csi:
+    ; Read byte 3
+    syscall SYS_READ, FD_STDIN, in_buf, 1
+    cmp eax, 1
+    je .poll_check_csi_byte3
+
+    ; Probe with 5 ms grace sleep if byte 3 is delayed
+    mov dword [timespec], 0
+    mov dword [timespec + 4], NANOSLEEP_5MS
+    syscall SYS_NANOSLEEP, timespec, 0
+    syscall SYS_READ, FD_STDIN, in_buf, 1
+    cmp eax, 1
+    jne .poll_discard_unknown   ; Incomplete CSI sequence -> return -1
+
+.poll_check_csi_byte3:
+    movzx esi, byte [in_buf]    ; ESI = byte 3 (preserved across syscall)
+
+    ; Single-character CSI sequences: ESC [ A/B/C/D/H/F
+    cmp esi, 'A'
+    je .poll_return_up
+    cmp esi, 'B'
+    je .poll_return_down
+    cmp esi, 'C'
+    je .poll_return_right
+    cmp esi, 'D'
+    je .poll_return_left
+    cmp esi, 'H'
+    je .poll_return_home
+    cmp esi, 'F'
+    je .poll_return_end
+
+    ; Numbered CSI sequences: ESC [ <num> ~
+    ; Check for '3', '5', '6', '1', '4'
+    cmp esi, '3'
+    je .poll_read_csi_tilde
+    cmp esi, '5'
+    je .poll_read_csi_tilde
+    cmp esi, '6'
+    je .poll_read_csi_tilde
+    cmp esi, '1'
+    je .poll_read_csi_tilde
+    cmp esi, '4'
+    je .poll_read_csi_tilde
+
+    ; Not a recognized single character or supported numbered prefix.
+    ; Check if byte 3 is already a CSI sequence terminator (0x40 - 0x7E)
+    cmp esi, 0x40
+    jb .poll_drain_csi_start
+    cmp esi, 0x7E
+    jbe .poll_discard_unknown   ; Sequence terminator already consumed
+
+    jmp .poll_drain_csi_start
+
+.poll_read_csi_tilde:
+    ; Read byte 4 (ESI still holds byte 3 across syscall)
+    syscall SYS_READ, FD_STDIN, in_buf, 1
+    cmp eax, 1
+    je .poll_check_csi_tilde
+
+    ; Probe with 5 ms grace sleep if byte 4 is delayed
+    mov dword [timespec], 0
+    mov dword [timespec + 4], NANOSLEEP_5MS
+    syscall SYS_NANOSLEEP, timespec, 0
+    syscall SYS_READ, FD_STDIN, in_buf, 1
+    cmp eax, 1
+    jne .poll_discard_unknown
+
+.poll_check_csi_tilde:
+    cmp byte [in_buf], CHAR_TILDE   ; '~' (0x7E)
+    jne .poll_drain_csi_check_cur   ; Byte 4 is not '~' (e.g. modified key ESC [ 1 ; 5 A) -> drain
+
+    ; Byte 4 is '~': match saved byte 3 in ESI to appropriate key code
+    cmp esi, '3'
+    je .poll_return_delete
+    cmp esi, '5'
+    je .poll_return_pgup
+    cmp esi, '6'
+    je .poll_return_pgdn
+    cmp esi, '1'
+    je .poll_return_home
+    cmp esi, '4'
+    je .poll_return_end
+
+    jmp .poll_discard_unknown
+
+; -----------------------------------------------------------------------------
+; Unknown CSI Sequence Drain Loop
+; Consumes bytes until a standard CSI terminator (0x40 - 0x7E) is encountered,
+; bounded to at most 16 bytes to prevent infinite loops on malformed streams.
+; Uses EDI as loop counter (preserved across syscall).
+; -----------------------------------------------------------------------------
+.poll_drain_csi_check_cur:
+    ; Check if the byte already in in_buf is a terminator (0x40 - 0x7E)
+    movzx eax, byte [in_buf]
+    cmp eax, 0x40
+    jb .poll_drain_csi_start
+    cmp eax, 0x7E
+    jbe .poll_discard_unknown   ; Current byte was terminator: fully drained
+
+.poll_drain_csi_start:
+    mov edi, 16                 ; Bounded iteration counter (max 16 bytes)
+
+.poll_drain_csi_loop:
+    dec edi
+    jz .poll_discard_unknown    ; Bound reached: stop draining
+
+    ; Read next byte non-blockingly
+    syscall SYS_READ, FD_STDIN, in_buf, 1
+    cmp eax, 1
+    jne .poll_discard_unknown   ; No more bytes ready: stop draining
+
+    movzx eax, byte [in_buf]
+    cmp eax, 0x40
+    jb .poll_drain_csi_loop
+    cmp eax, 0x7E
+    jbe .poll_discard_unknown   ; Terminator reached: sequence fully consumed!
+    jmp .poll_drain_csi_loop
+
+; -----------------------------------------------------------------------------
+; Key Return Points
+; -----------------------------------------------------------------------------
+.poll_return_up:
+    mov eax, KEY_UP
+    jmp .poll_done
+
+.poll_return_down:
+    mov eax, KEY_DOWN
+    jmp .poll_done
+
+.poll_return_right:
+    mov eax, KEY_RIGHT
+    jmp .poll_done
+
+.poll_return_left:
+    mov eax, KEY_LEFT
+    jmp .poll_done
+
+.poll_return_pgup:
+    mov eax, KEY_PGUP
+    jmp .poll_done
+
+.poll_return_pgdn:
+    mov eax, KEY_PGDN
+    jmp .poll_done
+
+.poll_return_home:
+    mov eax, KEY_HOME
+    jmp .poll_done
+
+.poll_return_end:
+    mov eax, KEY_END
+    jmp .poll_done
+
+.poll_return_delete:
+    mov eax, KEY_DELETE
+    jmp .poll_done
+
+.poll_discard_unknown:
+    mov eax, KEY_NONE
     jmp .poll_done
 
 .poll_no_key:
