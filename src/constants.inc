@@ -60,12 +60,15 @@ CHAR_BELL               equ 7           ; Terminal audio bell (\a)
 CHAR_LF                 equ 10          ; Line feed (\n)
 CHAR_ESC                equ 27          ; Escape character (0x1B)
 CHAR_SPACE              equ 32          ; Space character (' ')
+CHAR_HASH               equ 35          ; Hash / pound symbol ('#')
+CHAR_PERCENT            equ 37          ; Percent symbol ('%')
 CHAR_PLUS               equ 43          ; Plus symbol ('+')
 CHAR_MINUS              equ 45          ; Hyphen/dash symbol ('-')
 CHAR_ZERO               equ 48          ; ASCII digit zero ('0')
 CHAR_COLON              equ 58          ; Colon symbol (':')
 CHAR_SEMICOLON          equ 59          ; Semicolon symbol (';')
 CHAR_LBRACKET           equ 91          ; Left square bracket ('[')
+CHAR_RBRACKET           equ 93          ; Right square bracket (']')
 CHAR_UPPER_H            equ 72          ; Uppercase letter H ('H')
 CHAR_PIPE               equ 124         ; Vertical bar / pipe symbol ('|')
 CHAR_TILDE              equ 126         ; Tilde symbol ('~', 0x7E)
@@ -136,6 +139,7 @@ TIMER_DEMO_LONG_BREAK_SECS  equ 8       ; 8 seconds
 ; =============================================================================
 TZ_OFFSET               equ 28800       ; UTC+8 timezone offset in seconds (Philippines)
 SECONDS_PER_DAY         equ 86400       ; Seconds in 24 hours
+SECONDS_PER_HOUR        equ 3600        ; Seconds in 1 hour
 SECONDS_PER_MINUTE      equ 60          ; Seconds in 1 minute
 DECIMAL_BASE            equ 10          ; Base 10 for radix conversion
 MAX_U32_2_CLAMP         equ 99          ; Upper clamp limit for buf_u32_2
@@ -261,11 +265,14 @@ UI_STUB_ROW_BELOW       equ 9           ; Row below frame for erase_eos
 UI_STUB_COL_TITLE       equ 4           ; Title text column
 UI_STUB_COL_CONTENT     equ 4           ; Message and key text column
 
-; Cat Poses (PRD §6.4)
+; Cat Poses (PRD §6.4, PRD_V2 §8, v12)
 CAT_POSE_IDLE           equ 0           ; Pose 0: Idle cat (main menu)
 CAT_POSE_WORKING        equ 1           ; Pose 1: Working / focused eyes (timer focus)
 CAT_POSE_RESTING        equ 2           ; Pose 2: Resting / sleeping (timer break)
-CAT_POSE_MAX            equ 2           ; Maximum valid pose index
+CAT_POSE_SLEEPY         equ 2           ; Synonym for resting pose
+CAT_POSE_HAPPY          equ 3           ; Pose 3: Happy cat (timer complete, habit check-in)
+CAT_POSE_SURPRISED      equ 4           ; Pose 4: Surprised cat (error, confirmation)
+CAT_POSE_MAX            equ 4           ; Maximum valid pose index
 CAT_LINES               equ 3           ; Number of lines in cat ASCII art
 
 ; Keyboard Input Constants (Task 4 Additions)
@@ -554,3 +561,25 @@ SETTINGS_MODE_CONFIRM   equ 2           ; Reset confirmation modal
 COLOR_GRID_ROWS         equ 16          ; 16 rows of colors
 COLOR_GRID_COLS         equ 16          ; 16 columns of colors
 COLOR_STEP_PG           equ 16          ; Step size for PgUp / PgDn (+/- 16)
+
+; =============================================================================
+; Task V6 / v12 Additions: Cohesive Terminal UI Components & Glyphs
+; =============================================================================
+GLYPH_HLINE             equ 0           ; ─ or -
+GLYPH_VLINE             equ 1           ; │ or |
+GLYPH_CORNER_TL         equ 2           ; ╭ or +
+GLYPH_CORNER_TR         equ 3           ; ╮ or +
+GLYPH_CORNER_BL         equ 4           ; ╰ or +
+GLYPH_CORNER_BR         equ 5           ; ╯ or +
+GLYPH_TEE_LEFT          equ 6           ; ├ or +
+GLYPH_TEE_RIGHT         equ 7           ; ┤ or +
+GLYPH_STAR              equ 8           ; ★ or *
+GLYPH_HEART             equ 9           ; ♥ or v
+GLYPH_DOT_FILLED        equ 10          ; ● or @
+GLYPH_DOT_EMPTY         equ 11          ; ○ or o
+GLYPH_BAR_FULL          equ 12          ; ▰ or #
+GLYPH_BAR_EMPTY         equ 13          ; ▱ or -
+GLYPH_SPARKLE           equ 14          ; ✦ or *
+GLYPH_COUNT             equ 15
+
+COZY_TIPS_COUNT         equ 7           ; Number of deterministic daily cozy tips

@@ -30,11 +30,15 @@ ui_draw_cat:
     save_regs
     push eax
 
-    ; Clamp / validate pose number (default to 0 if > 2)
+    ; Clamp / validate pose number (default to 0 if > 4)
     cmp eax, CAT_POSE_WORKING
     je .pose_1
     cmp eax, CAT_POSE_RESTING
     je .pose_2
+    cmp eax, CAT_POSE_HAPPY
+    je .pose_3
+    cmp eax, CAT_POSE_SURPRISED
+    je .pose_4
 
     ; Default: Pose 0 (Idle)
 .pose_0:
@@ -53,6 +57,18 @@ ui_draw_cat:
     mov esi, cat_p2_l1
     mov edx, cat_p2_l2
     mov ecx, cat_p2_l3
+    jmp .render_art
+
+.pose_3:
+    mov esi, cat_p3_l1
+    mov edx, cat_p3_l2
+    mov ecx, cat_p3_l3
+    jmp .render_art
+
+.pose_4:
+    mov esi, cat_p4_l1
+    mov edx, cat_p4_l2
+    mov ecx, cat_p4_l3
 
 .render_art:
     ; Apply cat artwork color slot
@@ -90,45 +106,97 @@ ui_draw_cat:
     ret
 
 ;=============================================================================
-; Procedure: ui_frame_hline
-; Purpose:   Positions cursor at frame (row, 1) and appends '+' followed by
-;            (ui_w - 2) '-' characters and a trailing '+'. Total line width is
-;            exactly ui_w cols. Appends ESC[K to clear remainder of line.
-; IN:        EAX = Row coordinate (1-based)
-; OUT:       Appends horizontal frame line to out_buf
+; Procedure: ui_frame_emit_dashes
+; Purpose:   Emits (ui_w - 2) horizontal border dashes:
+;            In UTF-8 mode: '─' (0xE2, 0x94, 0x80)
+;            In ASCII mode: '-' (CHAR_MINUS)
+; IN:        None (uses [ui_w] and [setting_charset])
+; OUT:       Appends dashes to out_buf
 ; CLOBBERS:  None (preserves all)
 ;=============================================================================
-ui_frame_hline:
+ui_frame_emit_dashes:
+    save_regs
+    push eax
+    push ecx
+
+    mov ecx, [ui_w]
+    sub ecx, 2
+    jbe .dashes_done
+
+    cmp byte [setting_charset], 1
+    je .dashes_ascii
+
+.dashes_utf8_loop:
+    mov al, 0xE2
+    call buf_char
+    mov al, 0x94
+    call buf_char
+    mov al, 0x80                ; '─'
+    call buf_char
+    dec ecx
+    jnz .dashes_utf8_loop
+    jmp .dashes_done
+
+.dashes_ascii:
+    mov al, CHAR_MINUS
+    call buf_repeat
+
+.dashes_done:
+    pop ecx
+    pop eax
+    restore_regs
+    ret
+
+;=============================================================================
+; Procedure: ui_frame_hline_top
+; Purpose:   Draws the top border of the frame:
+;            ╭───╮ (UTF-8) or +---+ (ASCII)
+; IN:        EAX = Row coordinate (1-based)
+; OUT:       Appends top frame line to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_frame_hline_top:
     save_regs
     push eax
 
-    ; Position cursor at frame (row, 1)
     mov ebx, 1
     call ui_goto
 
-    ; Frame border color
     mov al, SLOT_BORDER
     call ui_color
 
-    ; Left corner '+'
+    cmp byte [setting_charset], 1
+    je .top_l_ascii
+    mov al, 0xE2
+    call buf_char
+    mov al, 0x95
+    call buf_char
+    mov al, 0xAD                ; '╭'
+    call buf_char
+    jmp .top_dashes
+.top_l_ascii:
     mov al, CHAR_PLUS
     call buf_char
 
-    ; (ui_w - 2) horizontal border dashes '-'
-    mov al, CHAR_MINUS
-    mov ecx, [ui_w]
-    sub ecx, 2
-    call buf_repeat
+.top_dashes:
+    call ui_frame_emit_dashes
 
-    ; Right corner '+'
+    cmp byte [setting_charset], 1
+    je .top_r_ascii
+    mov al, 0xE2
+    call buf_char
+    mov al, 0x95
+    call buf_char
+    mov al, 0xAE                ; '╮'
+    call buf_char
+    jmp .top_done
+.top_r_ascii:
     mov al, CHAR_PLUS
     call buf_char
 
-    ; Reset border color styling
+.top_done:
     mov esi, ansi_reset
     call buf_str
-
-    ; Clear remainder of line to prevent wrapped text residue on border rows (Task 9)
     mov esi, ansi_erase_eol
     call buf_str
 
@@ -137,10 +205,188 @@ ui_frame_hline:
     ret
 
 ;=============================================================================
+; Procedure: ui_frame_hline_bot
+; Purpose:   Draws the bottom border of the frame:
+;            ╰───╯ (UTF-8) or +---+ (ASCII)
+; IN:        EAX = Row coordinate (1-based)
+; OUT:       Appends bottom frame line to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_frame_hline_bot:
+    save_regs
+    push eax
+
+    mov ebx, 1
+    call ui_goto
+
+    mov al, SLOT_BORDER
+    call ui_color
+
+    cmp byte [setting_charset], 1
+    je .bot_l_ascii
+    mov al, 0xE2
+    call buf_char
+    mov al, 0x95
+    call buf_char
+    mov al, 0xB0                ; '╰'
+    call buf_char
+    jmp .bot_dashes
+.bot_l_ascii:
+    mov al, CHAR_PLUS
+    call buf_char
+
+.bot_dashes:
+    call ui_frame_emit_dashes
+
+    cmp byte [setting_charset], 1
+    je .bot_r_ascii
+    mov al, 0xE2
+    call buf_char
+    mov al, 0x95
+    call buf_char
+    mov al, 0xAF                ; '╯'
+    call buf_char
+    jmp .bot_done
+.bot_r_ascii:
+    mov al, CHAR_PLUS
+    call buf_char
+
+.bot_done:
+    mov esi, ansi_reset
+    call buf_str
+    mov esi, ansi_erase_eol
+    call buf_str
+
+    pop eax
+    restore_regs
+    ret
+
+;=============================================================================
+; Procedure: ui_frame_hline_mid
+; Purpose:   Draws a middle separator line across the frame:
+;            ├───┤ (UTF-8) or +---+ (ASCII)
+; IN:        EAX = Row coordinate (1-based)
+; OUT:       Appends middle frame separator to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_frame_hline_mid:
+    save_regs
+    push eax
+
+    mov ebx, 1
+    call ui_goto
+
+    mov al, SLOT_BORDER
+    call ui_color
+
+    cmp byte [setting_charset], 1
+    je .mid_l_ascii
+    mov al, 0xE2
+    call buf_char
+    mov al, 0x94
+    call buf_char
+    mov al, 0x9C                ; '├'
+    call buf_char
+    jmp .mid_dashes
+.mid_l_ascii:
+    mov al, CHAR_PLUS
+    call buf_char
+
+.mid_dashes:
+    call ui_frame_emit_dashes
+
+    cmp byte [setting_charset], 1
+    je .mid_r_ascii
+    mov al, 0xE2
+    call buf_char
+    mov al, 0x94
+    call buf_char
+    mov al, 0xA4                ; '┤'
+    call buf_char
+    jmp .mid_done
+.mid_r_ascii:
+    mov al, CHAR_PLUS
+    call buf_char
+
+.mid_done:
+    mov esi, ansi_reset
+    call buf_str
+    mov esi, ansi_erase_eol
+    call buf_str
+
+    pop eax
+    restore_regs
+    ret
+
+;=============================================================================
+; Procedure: ui_frame_hline
+; Purpose:   Positions cursor at frame (row, 1) and draws an adaptive horizontal
+;            border line. Dispatches automatically to top border, bottom border,
+;            or middle divider based on Row and State. Total width is ui_w cols.
+;            Appends ESC[K to clear remainder of line.
+; IN:        EAX = Row coordinate (1-based)
+; OUT:       Appends horizontal frame line to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_frame_hline:
+    save_regs
+    push eax
+
+    cmp eax, 1
+    je .call_top
+    cmp eax, [ui_screen_bottom_row]
+    je .call_bot
+    cmp eax, 10
+    je .check_timer_bot
+    cmp eax, 16
+    je .check_hab_bot
+    cmp eax, 17
+    je .check_jrn_bot
+    cmp eax, 22
+    je .call_bot
+    cmp eax, 23
+    je .call_bot
+
+    call ui_frame_hline_mid
+    jmp .hline_ret
+
+.check_timer_bot:
+    cmp dword [state], STATE_TIMER
+    je .call_bot
+    call ui_frame_hline_mid
+    jmp .hline_ret
+
+.check_hab_bot:
+    cmp dword [state], STATE_HABITS
+    je .call_bot
+    cmp dword [state], STATE_MENU
+    je .call_bot
+    call ui_frame_hline_mid
+    jmp .hline_ret
+
+.check_jrn_bot:
+    cmp dword [state], STATE_JOURNAL
+    je .call_bot
+    call ui_frame_hline_mid
+    jmp .hline_ret
+
+.call_top:
+    call ui_frame_hline_top
+    jmp .hline_ret
+
+.call_bot:
+    call ui_frame_hline_bot
+
+.hline_ret:
+    pop eax
+    restore_regs
+    ret
+
+;=============================================================================
 ; Procedure: ui_frame_row
-; Purpose:   Positions cursor at frame (row, 1), writes left border '|', erases
-;            from cursor to end of line via ESC[K (obliterating any leftover text),
-;            positions cursor at frame column ui_w, and writes right border '|'.
+; Purpose:   Positions cursor at frame (row, 1), writes left border ('│' or '|'),
+;            erases from cursor to end of line via ESC[K, positions cursor at
+;            frame column ui_w, and writes right border ('│' or '|').
 ; IN:        EAX = Row coordinate (1-based)
 ; OUT:       Appends cleared framed row to out_buf
 ; CLOBBERS:  None (preserves all)
@@ -153,11 +399,22 @@ ui_frame_row:
     mov ebx, 1
     call ui_goto
 
-    ; 2. Emit border color and left border '|'
+    ; 2. Emit border color and left border ('│' in UTF-8 or '|' in ASCII)
     mov al, SLOT_BORDER
     call ui_color
+    cmp byte [setting_charset], 1
+    je .row_l_ascii
+    mov al, 0xE2
+    call buf_char
+    mov al, 0x94
+    call buf_char
+    mov al, 0x82                ; '│'
+    call buf_char
+    jmp .row_l_done
+.row_l_ascii:
     mov al, CHAR_PIPE
     call buf_char
+.row_l_done:
     mov esi, ansi_reset
     call buf_str
 
@@ -170,11 +427,22 @@ ui_frame_row:
     mov ebx, [ui_w]
     call ui_goto
 
-    ; 5. Emit border color and right border '|'
+    ; 5. Emit border color and right border ('│' in UTF-8 or '|' in ASCII)
     mov al, SLOT_BORDER
     call ui_color
+    cmp byte [setting_charset], 1
+    je .row_r_ascii
+    mov al, 0xE2
+    call buf_char
+    mov al, 0x94
+    call buf_char
+    mov al, 0x82                ; '│'
+    call buf_char
+    jmp .row_r_done
+.row_r_ascii:
     mov al, CHAR_PIPE
     call buf_char
+.row_r_done:
     mov esi, ansi_reset
     call buf_str
 
@@ -407,6 +675,17 @@ ui_draw_menu:
     mov esi, ansi_reset
     call buf_str
 
+    ; 3b. Deterministic greeting at Row 4, Col 14
+    mov eax, UI_MENU_ROW_CAT3
+    mov ebx, UI_MENU_COL_TITLE
+    call ui_goto
+    mov al, SLOT_DIM
+    call ui_color
+    call ui_greeting_get
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+
     ; 4. Dashboard line at Row 6, Col 4: "Today: N pomodoros      Habits: D/T done"
     mov eax, UI_MENU_ROW_DASH
     mov ebx, UI_MENU_COL_CONTENT
@@ -447,6 +726,24 @@ ui_draw_menu:
     call buf_str
 
     mov esi, dash_lbl_done
+    call buf_str
+
+    ; 4b. Deterministic daily cozy tip at Row 7, Col 4
+    mov eax, UI_MENU_ROW_BLANK
+    mov ebx, UI_MENU_COL_CONTENT
+    call ui_goto
+    mov al, SLOT_ACCENT
+    call ui_color
+    mov eax, GLYPH_SPARKLE
+    call ui_glyph_str
+    call buf_str
+    mov al, CHAR_SPACE
+    call buf_char
+    mov al, SLOT_DIM
+    call ui_color
+    call ui_tip_get
+    call buf_str
+    mov esi, ansi_reset
     call buf_str
 
     ; 5. Menu options
@@ -491,6 +788,16 @@ ui_draw_menu:
     mov al, SLOT_OK
     call ui_color
     mov esi, menu_demo_on
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+    mov al, CHAR_SPACE
+    call buf_char
+    mov al, CHAR_SPACE
+    call buf_char
+    mov al, SLOT_WARN
+    call ui_color
+    mov esi, dash_badge_demo
     call buf_str
     mov esi, ansi_reset
     call buf_str
@@ -673,22 +980,60 @@ ui_progress_bar:
     mov al, CHAR_LBRACKET
     call buf_char
 
-    ; 2. Emit filled '#' characters (EBX times) with SLOT_BAR_FULL
+    ; 2. Emit filled segments (EBX times) with SLOT_BAR_FULL
     mov al, SLOT_BAR_FULL
     call ui_color
-    mov al, CHAR_HASH
     mov ecx, ebx
-    call buf_repeat
+    test ecx, ecx
+    jz .pb_empty_segments
+
+.pb_fill_loop:
+    cmp byte [setting_charset], 1
+    je .pb_fill_ascii
+    mov al, 0xE2
+    call buf_char
+    mov al, 0x96
+    call buf_char
+    mov al, 0xB0                ; '▰'
+    call buf_char
+    jmp .pb_fill_next
+.pb_fill_ascii:
+    mov al, CHAR_HASH
+    call buf_char
+.pb_fill_next:
+    dec ecx
+    jnz .pb_fill_loop
+
+.pb_empty_segments:
     mov esi, ansi_reset
     call buf_str
 
-    ; 3. Emit empty '-' characters (PROGRESS_BAR_WIDTH - EBX times) with SLOT_BAR_EMPTY
+    ; 3. Emit empty segments (PROGRESS_BAR_WIDTH - EBX times) with SLOT_BAR_EMPTY
     mov al, SLOT_BAR_EMPTY
     call ui_color
-    mov al, CHAR_MINUS
     mov ecx, PROGRESS_BAR_WIDTH
     sub ecx, ebx
-    call buf_repeat
+    test ecx, ecx
+    jz .pb_close_bracket
+
+.pb_empty_loop:
+    cmp byte [setting_charset], 1
+    je .pb_empty_ascii
+    mov al, 0xE2
+    call buf_char
+    mov al, 0x96
+    call buf_char
+    mov al, 0xB1                ; '▱'
+    call buf_char
+    jmp .pb_empty_next
+.pb_empty_ascii:
+    mov al, CHAR_MINUS
+    call buf_char
+.pb_empty_next:
+    dec ecx
+    jnz .pb_empty_loop
+
+.pb_close_bracket:
     mov esi, ansi_reset
     call buf_str
 
@@ -847,9 +1192,11 @@ ui_draw_status:
     cmp ebx, STATUS_ERR
     je .status_style_err
 
-    ; STATUS_INFO: warning/info slot
+    ; STATUS_INFO: warning/info slot with [i] marker
     mov al, SLOT_WARN
     call ui_color
+    mov esi, status_marker_info
+    call buf_str
     jmp .status_emit
 
 .status_style_ok:
@@ -857,6 +1204,8 @@ ui_draw_status:
     call buf_str
     mov al, SLOT_OK
     call ui_color
+    mov esi, status_marker_ok
+    call buf_str
     jmp .status_emit
 
 .status_style_err:
@@ -864,6 +1213,8 @@ ui_draw_status:
     call buf_str
     mov al, SLOT_ERR
     call ui_color
+    mov esi, status_marker_err
+    call buf_str
 
 .status_emit:
     mov esi, [esp]              ; Retrieve message pointer

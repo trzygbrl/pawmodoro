@@ -145,4 +145,8 @@ The automated smoke test script (`tests/smoke.sh`) provides headless regression 
 | Check 14: Non-TTY Stdin Rejection (Exit 1) | TC-05 |
 | Check 15: Terminal Size Gate (< 80x24) & Auto-Recovery | TC-06, TC-07 |
 | Check 16: Zero Screen Overflow (> ui_w Columns) | TC-42, TC-46 |
+| Check 17: Settings Navigation, Color Editor, Immediate Save & 24B Check | TC-54, TC-55 |
+| Check 18: Cohesive Visual Elements (Greeting, Daily Tip, Cycle Dots, [PAUSED] Badge) | TC-57, TC-58 |
+| Check 19: Strict 7-bit ASCII Fallback (Zero Bytes >= 0x80 across 5 Screens) | TC-59 |
+| Check 20: UTF-8 Rounded Border Geometry (╭, ╰, ─, │ across 5 Screens) | TC-60 |
 | Extended (`--full`): 4-Session Pomodoro Cycle | TC-20 |

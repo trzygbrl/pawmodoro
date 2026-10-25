@@ -1003,6 +1003,7 @@ journal_draw:
     call ui_size_gate           ; Terminal dimension check gate (Task 9)
     call ui_layout_update       ; Recalculate adaptive layout geometry (PRD v2 §2)
     save_regs
+    mov dword [ui_screen_bottom_row], UI_JRN_ROW_BOTTOM
 
     ; -------------------------------------------------------------------------
     ; Phase 1: Draw Frame Borders and Erase Inner Rows
@@ -1062,6 +1063,43 @@ journal_draw:
     call buf_str
     mov esi, ansi_reset
     call buf_str
+
+    ; Right-aligned scroll context [sel+1/total] if not full view and entries exist
+    cmp dword [jrnl_full_view], 1
+    je .skip_scroll_ctx
+    cmp dword [jrnl_line_count], 0
+    jbe .skip_scroll_ctx
+
+    mov eax, UI_JRN_ROW_TITLE
+    mov ebx, [ui_w]
+    sub ebx, 10
+    call ui_goto
+
+    mov al, SLOT_DIM
+    call ui_color
+    mov al, CHAR_LBRACKET
+    call buf_char
+
+    mov al, SLOT_ACCENT
+    call ui_color
+    mov eax, [jrnl_sel_idx]
+    inc eax
+    call buf_u32
+
+    mov al, SLOT_DIM
+    call ui_color
+    mov al, CHAR_SLASH
+    call buf_char
+
+    mov eax, [jrnl_line_count]
+    call buf_u32
+
+    mov al, CHAR_RBRACKET
+    call buf_char
+    mov esi, ansi_reset
+    call buf_str
+
+.skip_scroll_ctx:
 
     ; 2. Separator Border (Row 3)
     mov eax, UI_JRN_ROW_SEP
@@ -1150,42 +1188,29 @@ journal_draw:
     jz .draw_key_help
 
     mov eax, UI_JRN_ROW_MSG
-    mov ebx, UI_JRN_COL_MSG
-    call ui_goto
-
     cmp esi, err_could_not_save
-    je .msg_color_red
+    je .jmsg_style_err
     cmp esi, jrnl_msg_could_not_delete
-    je .msg_color_red
+    je .jmsg_style_err
     cmp esi, jrnl_msg_saved
-    je .msg_color_green
+    je .jmsg_style_ok
     cmp esi, jrnl_msg_deleted
-    je .msg_color_green
+    je .jmsg_style_ok
 
-    ; Default: yellow for warnings/prompts
-    mov al, SLOT_WARN
-    call ui_color
-    jmp .msg_print_body
+    mov ebx, STATUS_INFO
+    call ui_draw_status
+    jmp .jmsg_clear_check
 
-.msg_color_red:
-    mov esi, ansi_bold
-    call buf_str
-    mov al, SLOT_ERR
-    call ui_color
-    jmp .msg_print_body
+.jmsg_style_err:
+    mov ebx, STATUS_ERR
+    call ui_draw_status
+    jmp .jmsg_clear_check
 
-.msg_color_green:
-    mov esi, ansi_bold
-    call buf_str
-    mov al, SLOT_OK
-    call ui_color
+.jmsg_style_ok:
+    mov ebx, STATUS_OK
+    call ui_draw_status
 
-.msg_print_body:
-    mov esi, [jrnl_msg]
-    call buf_str
-    mov esi, ansi_reset
-    call buf_str
-
+.jmsg_clear_check:
     ; Clear message pointer only if not currently confirming deletion
     cmp dword [jrnl_msg], jrnl_msg_del_prompt
     je .draw_key_help

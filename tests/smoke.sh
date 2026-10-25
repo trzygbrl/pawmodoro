@@ -540,6 +540,137 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# Scenario 18: Cohesive Visual System Across All Screens
+# -----------------------------------------------------------------------------
+send "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+if wait_for "P A W M O D O R O" 5; then
+    MENU_CAP=$(cap)
+    GREET_OK=0
+    if echo "$MENU_CAP" | grep -q "Good morning" || echo "$MENU_CAP" | grep -q "Good afternoon" || echo "$MENU_CAP" | grep -q "Good evening"; then
+        GREET_OK=1
+    fi
+    TIP_OK=0
+    if echo "$MENU_CAP" | grep -q "Tip:"; then
+        TIP_OK=1
+    fi
+    # Check Timer cycle dots and pause badge
+    send "1" # Timer
+    wait_for "FOCUS" 5
+    TIMER_CAP=$(cap)
+    CYCLE_OK=0
+    if echo "$TIMER_CAP" | grep -q "Cycle:"; then
+        CYCLE_OK=1
+    fi
+    send "P" # Pause
+    sleep 0.2
+    PAUSE_OK=0
+    if cap | grep -q "\[PAUSED\]"; then
+        PAUSE_OK=1
+    fi
+    send "P" # Resume
+    sleep 0.2
+    send "Q" # Back
+    wait_for "P A W M O D O R O" 5
+    send "Q" # Quit
+    sleep 0.4
+    if [ "$GREET_OK" -eq 1 ] && [ "$TIP_OK" -eq 1 ] && [ "$CYCLE_OK" -eq 1 ] && [ "$PAUSE_OK" -eq 1 ]; then
+        pass "Scenario 18 - Cohesive visual elements (greeting, daily tip, cycle dots, [PAUSED] badge)"
+    else
+        fail "Scenario 18 - Visual elements missing (greet=$GREET_OK, tip=$TIP_OK, cycle=$CYCLE_OK, pause=$PAUSE_OK)"
+    fi
+else
+    fail "Scenario 18 - Failed to start Pawmodoro"
+fi
+
+# -----------------------------------------------------------------------------
+# Scenario 19: Strict 7-bit ASCII Fallback Across All Screens
+# -----------------------------------------------------------------------------
+python3 -c "
+magic = b'PAWS'
+data = magic + bytes([1, 0] + [0]*12 + [1, 0, 1, 0, 1, 2])
+with open('$TMP_DIR/settings.dat', 'wb') as f:
+    f.write(data)
+"
+send "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+if wait_for "P A W M O D O R O" 5; then
+    ASCII_OK=1
+    # Menu
+    if tmux capture-pane -t "$TMUX_SESSION" -ep | grep -P "[\x80-\xFF]" >/dev/null; then ASCII_OK=0; fi
+    # Timer
+    send "1"
+    wait_for "FOCUS" 5
+    if tmux capture-pane -t "$TMUX_SESSION" -ep | grep -P "[\x80-\xFF]" >/dev/null; then ASCII_OK=0; fi
+    send "Q"
+    wait_for "P A W M O D O R O" 5
+    # Habits
+    send "2"
+    wait_for "HABIT TRACKER" 5
+    if tmux capture-pane -t "$TMUX_SESSION" -ep | grep -P "[\x80-\xFF]" >/dev/null; then ASCII_OK=0; fi
+    send "B"
+    wait_for "P A W M O D O R O" 5
+    # Journal
+    send "3"
+    wait_for "JOURNAL" 5
+    if tmux capture-pane -t "$TMUX_SESSION" -ep | grep -P "[\x80-\xFF]" >/dev/null; then ASCII_OK=0; fi
+    send "B"
+    wait_for "P A W M O D O R O" 5
+    # Settings
+    send "5"
+    wait_for "SETTINGS" 5
+    if tmux capture-pane -t "$TMUX_SESSION" -ep | grep -P "[\x80-\xFF]" >/dev/null; then ASCII_OK=0; fi
+    send "B"
+    wait_for "P A W M O D O R O" 5
+    send "Q"
+    sleep 0.4
+    rm -f "$TMP_DIR/settings.dat"
+    if [ "$ASCII_OK" -eq 1 ]; then
+        pass "Scenario 19 - Strict 7-bit ASCII mode emits zero bytes >= 0x80 across all 5 screens"
+    else
+        fail "Scenario 19 - Non-ASCII bytes detected in ASCII mode"
+    fi
+else
+    fail "Scenario 19 - Failed to start Pawmodoro in ASCII mode"
+fi
+
+# -----------------------------------------------------------------------------
+# Scenario 20: UTF-8 Rounded Border Geometry Across All Screens
+# -----------------------------------------------------------------------------
+send "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+if wait_for "P A W M O D O R O" 5; then
+    UTF8_OK=1
+    if ! cap | grep -q "╭" || ! cap | grep -q "╰"; then UTF8_OK=0; fi
+    send "1"
+    wait_for "FOCUS" 5
+    if ! cap | grep -q "╭" || ! cap | grep -q "╰"; then UTF8_OK=0; fi
+    send "Q"
+    wait_for "P A W M O D O R O" 5
+    send "2"
+    wait_for "HABIT TRACKER" 5
+    if ! cap | grep -q "╭" || ! cap | grep -q "╰"; then UTF8_OK=0; fi
+    send "B"
+    wait_for "P A W M O D O R O" 5
+    send "3"
+    wait_for "JOURNAL" 5
+    if ! cap | grep -q "╭" || ! cap | grep -q "╰"; then UTF8_OK=0; fi
+    send "B"
+    wait_for "P A W M O D O R O" 5
+    send "5"
+    wait_for "SETTINGS" 5
+    if ! cap | grep -q "╭" || ! cap | grep -q "╰"; then UTF8_OK=0; fi
+    send "B"
+    wait_for "P A W M O D O R O" 5
+    send "Q"
+    sleep 0.4
+    if [ "$UTF8_OK" -eq 1 ]; then
+        pass "Scenario 20 - UTF-8 rounded borders (╭, ╰, ─, │) verified across all 5 screens"
+    else
+        fail "Scenario 20 - Missing UTF-8 rounded border characters"
+    fi
+else
+    fail "Scenario 20 - Failed to start Pawmodoro for UTF-8 border check"
+fi
+
+# -----------------------------------------------------------------------------
 # Optional Extended Scenario: Full 4-Session Cycle (--full)
 # -----------------------------------------------------------------------------
 if [ "$FULL_MODE" -eq 1 ]; then

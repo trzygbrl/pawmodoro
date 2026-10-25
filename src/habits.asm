@@ -385,6 +385,7 @@ habits_draw:
     call ui_size_gate           ; Terminal dimension check gate (Task 9)
     call ui_layout_update       ; Recalculate adaptive layout geometry (PRD v2 §2)
     save_regs
+    mov dword [ui_screen_bottom_row], UI_HAB_ROW_BOTTOM
 
     ; -------------------------------------------------------------------------
     ; Phase 1: Draw Frame Borders and Erase Inner Rows (FR-U4)
@@ -523,42 +524,27 @@ habits_draw:
     jz .draw_key_help
 
     mov eax, UI_HAB_ROW_MSG
-    mov ebx, UI_HAB_COL_MSG
-    call ui_goto
-
-    ; Format message color according to category
     cmp esi, err_could_not_save
-    je .msg_color_red
+    je .msg_style_err
     cmp esi, habit_msg_checked_in
-    je .msg_color_green
+    je .msg_style_ok
     cmp esi, habit_msg_deleted
-    je .msg_color_green
+    je .msg_style_ok
 
-    ; Default: yellow for warnings, alerts, and prompts
-    mov al, SLOT_WARN
-    call ui_color
-    jmp .msg_print_body
+    mov ebx, STATUS_INFO
+    call ui_draw_status
+    jmp .clear_msg
 
-.msg_color_red:
-    mov esi, ansi_bold
-    call buf_str
-    mov al, SLOT_ERR
-    call ui_color
-    jmp .msg_print_body
+.msg_style_err:
+    mov ebx, STATUS_ERR
+    call ui_draw_status
+    jmp .clear_msg
 
-.msg_color_green:
-    mov esi, ansi_bold
-    call buf_str
-    mov al, SLOT_OK
-    call ui_color
+.msg_style_ok:
+    mov ebx, STATUS_OK
+    call ui_draw_status
 
-.msg_print_body:
-    mov esi, [habit_msg]
-    call buf_str
-    mov esi, ansi_reset
-    call buf_str
-
-    ; One-time message display: clear message pointer
+.clear_msg:
     mov dword [habit_msg], 0
 
 .draw_key_help:

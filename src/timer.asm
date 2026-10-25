@@ -38,6 +38,7 @@ timer_draw:
     call ui_layout_update       ; Recalculate adaptive layout geometry (PRD v2 §2)
     save_regs
     push eax                    ; [esp] = frame mode (0..4)
+    mov dword [ui_screen_bottom_row], UI_TIMER_ROW_BOTTOM
 
     ; -------------------------------------------------------------------------
     ; Phase 1: Draw Frame Borders and Erase Inner Rows (FR-U4)
@@ -131,11 +132,55 @@ timer_draw:
     call buf_str
 
 .skip_demo_badge:
-    ; 3. Cat ASCII art at Row 4, Col 6 (Working pose for Focus, Resting for Breaks)
+    ; 2b. Cycle dots at Row 3, Col 4: "Cycle: ● ○ ○ ○"
+    mov eax, UI_TIMER_ROW_BLANK1
+    mov ebx, UI_TIMER_COL_TITLE
+    call ui_goto
+    mov al, SLOT_DIM
+    call ui_color
+    mov esi, timer_lbl_cycle_prefix ; "Cycle: "
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+
+    ; Render 4 session dots: 1..session_no filled (SLOT_ACCENT), rest empty (SLOT_DIM)
+    mov ecx, 1
+.cycle_dots_loop:
+    cmp ecx, [session_no]
+    ja .dot_empty
+    mov al, SLOT_ACCENT
+    call ui_color
+    mov eax, GLYPH_DOT_FILLED
+    call ui_glyph_str
+    call buf_str
+    jmp .dot_space
+.dot_empty:
+    mov al, SLOT_DIM
+    call ui_color
+    mov eax, GLYPH_DOT_EMPTY
+    call ui_glyph_str
+    call buf_str
+.dot_space:
+    mov esi, ansi_reset
+    call buf_str
+    mov al, CHAR_SPACE
+    call buf_char
+    inc ecx
+    cmp ecx, SESSIONS_PER_CYCLE ; 4
+    jbe .cycle_dots_loop
+
+    ; 3. Cat ASCII art at Row 4, Col 6 (Working pose for Focus, Resting for Breaks, Happy for Focus Done)
     mov dword [cat_row], UI_TIMER_ROW_CAT1
     mov dword [cat_col], UI_TIMER_COL_CAT
+    mov edx, [esp]              ; Frame mode
+    cmp edx, TIMER_FRAME_FOCUS_DONE
+    je .cat_pose_happy
     mov edx, [phase]
     mov eax, [timer_phase_poses + edx*4]
+    jmp .cat_draw_call
+.cat_pose_happy:
+    mov eax, CAT_POSE_HAPPY
+.cat_draw_call:
     call ui_draw_cat
 
     ; 4. Time display MM:SS at Row 5, Col 20 (beside middle cat row)

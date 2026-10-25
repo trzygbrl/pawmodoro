@@ -121,6 +121,16 @@ section .data
     cat_p2_l2:              db "( u.u )  Z", CHAR_NULL
     cat_p2_l3:              db " > ^ < ", CHAR_NULL
 
+    ; Pose 3: Happy cat (Pomodoro complete, habit check-in)
+    cat_p3_l1:              db " /\_/\ ", CHAR_NULL
+    cat_p3_l2:              db "( ^.^ )", CHAR_NULL
+    cat_p3_l3:              db " > * < ", CHAR_NULL
+
+    ; Pose 4: Surprised cat (error, confirmation)
+    cat_p4_l1:              db " /\_/\ ", CHAR_NULL
+    cat_p4_l2:              db "( O.O )", CHAR_NULL
+    cat_p4_l3:              db " > o < ", CHAR_NULL
+
     ; Main Menu UI Strings (PRD §5)
     menu_title:             db "P A W M O D O R O", CHAR_NULL
     menu_tagline:           db "cozy focus - habits - notes", CHAR_NULL
@@ -174,7 +184,8 @@ section .data
     timer_lbl_demo:             db "[DEMO]", CHAR_NULL
 
     ; Timer Status Strings
-    timer_lbl_paused:           db "PAUSED", CHAR_NULL
+    timer_lbl_paused:           db "[PAUSED]", CHAR_NULL
+    timer_lbl_cycle_prefix:     db "Cycle: ", CHAR_NULL
 
     ; Key Help Prompts
     timer_help_running:         db "[P] Pause    [S] Skip    [Q] Stop and go back", CHAR_NULL
@@ -537,6 +548,97 @@ section .data
     settings_lbl_vol_prefix:    db "   Vol: < ", CHAR_NULL
     settings_lbl_vol_suffix:    db " > (0-3)", CHAR_NULL
 
+    ; =========================================================================
+    ; Task V6 / v12 Additions: Shared UI Assets & Glyphs
+    ; =========================================================================
+    menu_title_compact:         db "PAWMODORO", CHAR_NULL
+
+    ; Status Markers (PRD_V2 §13, v12)
+    status_marker_ok:           db "[OK] ", CHAR_NULL
+    status_marker_warn:         db "[!] ", CHAR_NULL
+    status_marker_err:          db "[ERR] ", CHAR_NULL
+    status_marker_info:         db "[i] ", CHAR_NULL
+
+    ; Deterministic Greetings (Local time hour of day)
+    greeting_morning:           db "Good morning, ready to focus?", CHAR_NULL
+    greeting_afternoon:         db "Good afternoon, keep up the momentum!", CHAR_NULL
+    greeting_evening:           db "Good evening, wrap up your day peacefully.", CHAR_NULL
+
+    ; Deterministic Daily Cozy Tips (time_today % 7)
+    cozy_tip_0:                 db "Tip: Take deep breaths and drink water between pomodoros.", CHAR_NULL
+    cozy_tip_1:                 db "Tip: Small daily habits compound into giant life achievements.", CHAR_NULL
+    cozy_tip_2:                 db "Tip: Clear your desk of clutter before starting your focus session.", CHAR_NULL
+    cozy_tip_3:                 db "Tip: Reflect on today's small wins in your Pawmodoro journal.", CHAR_NULL
+    cozy_tip_4:                 db "Tip: Rest your eyes on distant objects during short breaks.", CHAR_NULL
+    cozy_tip_5:                 db "Tip: Consistency beats intensity. Focus on showing up every day.", CHAR_NULL
+    cozy_tip_6:                 db "Tip: Celebrate every completed session! A happy cat is cheering for you.", CHAR_NULL
+
+    cozy_tips_table:
+        dd cozy_tip_0, cozy_tip_1, cozy_tip_2, cozy_tip_3
+        dd cozy_tip_4, cozy_tip_5, cozy_tip_6
+
+    ; Dashboard Card Labels
+    dash_card_pomo:             db "POMODOROS", CHAR_NULL
+    dash_card_habits:           db "HABITS", CHAR_NULL
+    dash_card_streak:           db "STREAK", CHAR_NULL
+    dash_lbl_streak:            db "Current streak: ", CHAR_NULL
+    dash_lbl_days:              db " days", CHAR_NULL
+    dash_badge_demo:            db "[DEMO]", CHAR_NULL
+
+    ; UI UTF-8 Glyphs
+    glyph_utf8_hline:           db 0xE2, 0x94, 0x80, CHAR_NULL  ; ─
+    glyph_utf8_vline:           db 0xE2, 0x94, 0x82, CHAR_NULL  ; │
+    glyph_utf8_corner_tl:       db 0xE2, 0x95, 0xAD, CHAR_NULL  ; ╭
+    glyph_utf8_corner_tr:       db 0xE2, 0x95, 0xAE, CHAR_NULL  ; ╮
+    glyph_utf8_corner_bl:       db 0xE2, 0x95, 0xB0, CHAR_NULL  ; ╰
+    glyph_utf8_corner_br:       db 0xE2, 0x95, 0xAF, CHAR_NULL  ; ╯
+    glyph_utf8_tee_left:        db 0xE2, 0x94, 0x9C, CHAR_NULL  ; ├
+    glyph_utf8_tee_right:       db 0xE2, 0x94, 0xA4, CHAR_NULL  ; ┤
+    glyph_utf8_star:            db 0xE2, 0x98, 0x85, CHAR_NULL  ; ★
+    glyph_utf8_heart:           db 0xE2, 0x99, 0xA5, CHAR_NULL  ; ♥
+    glyph_utf8_dot_filled:      db 0xE2, 0x97, 0x8F, CHAR_NULL  ; ●
+    glyph_utf8_dot_empty:       db 0xE2, 0x97, 0x8B, CHAR_NULL  ; ○
+    glyph_utf8_bar_full:        db 0xE2, 0x96, 0xB0, CHAR_NULL  ; ▰
+    glyph_utf8_bar_empty:       db 0xE2, 0x96, 0xB1, CHAR_NULL  ; ▱
+    glyph_utf8_sparkle:         db 0xE2, 0x9C, 0xA6, CHAR_NULL  ; ✦
+
+    glyph_utf8_table:
+        dd glyph_utf8_hline, glyph_utf8_vline
+        dd glyph_utf8_corner_tl, glyph_utf8_corner_tr
+        dd glyph_utf8_corner_bl, glyph_utf8_corner_br
+        dd glyph_utf8_tee_left, glyph_utf8_tee_right
+        dd glyph_utf8_star, glyph_utf8_heart
+        dd glyph_utf8_dot_filled, glyph_utf8_dot_empty
+        dd glyph_utf8_bar_full, glyph_utf8_bar_empty
+        dd glyph_utf8_sparkle
+
+    ; UI ASCII Fallback Glyphs
+    glyph_ascii_hline:          db "-", CHAR_NULL
+    glyph_ascii_vline:          db "|", CHAR_NULL
+    glyph_ascii_corner_tl:      db "+", CHAR_NULL
+    glyph_ascii_corner_tr:      db "+", CHAR_NULL
+    glyph_ascii_corner_bl:      db "+", CHAR_NULL
+    glyph_ascii_corner_br:      db "+", CHAR_NULL
+    glyph_ascii_tee_left:       db "+", CHAR_NULL
+    glyph_ascii_tee_right:      db "+", CHAR_NULL
+    glyph_ascii_star:           db "*", CHAR_NULL
+    glyph_ascii_heart:          db "v", CHAR_NULL
+    glyph_ascii_dot_filled:     db "@", CHAR_NULL
+    glyph_ascii_dot_empty:      db "o", CHAR_NULL
+    glyph_ascii_bar_full:       db "#", CHAR_NULL
+    glyph_ascii_bar_empty:      db "-", CHAR_NULL
+    glyph_ascii_sparkle:        db "*", CHAR_NULL
+
+    glyph_ascii_table:
+        dd glyph_ascii_hline, glyph_ascii_vline
+        dd glyph_ascii_corner_tl, glyph_ascii_corner_tr
+        dd glyph_ascii_corner_bl, glyph_ascii_corner_br
+        dd glyph_ascii_tee_left, glyph_ascii_tee_right
+        dd glyph_ascii_star, glyph_ascii_heart
+        dd glyph_ascii_dot_filled, glyph_ascii_dot_empty
+        dd glyph_ascii_bar_full, glyph_ascii_bar_empty
+        dd glyph_ascii_sparkle
+
 section .bss
 
     ; Settings UI state tracking
@@ -545,3 +647,6 @@ section .bss
     settings_color_slot:        resd 1          ; Currently selected slot in color editor (0..11)
     settings_status_msg:        resd 1          ; Pointer to status message (or 0)
     settings_status_style:      resd 1          ; STATUS_OK or STATUS_ERR
+
+    ; Screen bottom row tracking for clearing stale cells
+    ui_screen_bottom_row:       resd 1

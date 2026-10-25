@@ -23,6 +23,7 @@ section .text
 %include "src/term.asm"
 %include "src/time.asm"
 %include "src/ui.asm"
+%include "src/ui_components.asm"
 %include "src/file.asm"
 %include "src/settings.asm"
 %include "src/settings_ui.asm"
