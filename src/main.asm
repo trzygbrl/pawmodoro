@@ -31,6 +31,7 @@ section .text
 %include "src/timer.asm"
 %include "src/habits.asm"
 %include "src/journal.asm"
+%include "src/anim.asm"
 
     global _start
 
@@ -55,6 +56,7 @@ _start:
     call stats_load             ; Load persisted stats.dat into memory & sync dashboard (FR-U7, FR-D2)
     call habits_load            ; Load persisted habits.dat into memory & sync dashboard (FR-U7, FR-D3)
     call dashboard_refresh      ; Initialize live dashboard values in memory (Task 9)
+    call anim_init              ; Initialize animation engine & seed PRNG (Task V7)
 
     mov dword [state], STATE_MENU
     mov dword [demo_mode], 0
@@ -105,8 +107,9 @@ _start:
     mov dword [need_redraw], 0
 
 .wait_for_input:
-    ; Low-CPU sleep loop checking terminal dimensions and polling input (FR-U1, FR-T5, PRD v2 §2)
+    ; Low-CPU sleep loop checking terminal dimensions, ticking animation, and polling input
     call time_sleep_100ms
+    call anim_tick              ; Advance animation and flush dirty partial regions (Task V7)
     call term_size_ok
     test eax, eax
     jz .main_resized            ; Terminal shrunk below 80x24: trigger redraw to enter ui_size_gate immediately
@@ -120,6 +123,7 @@ _start:
     jmp .poll_input
 
 .main_resized:
+    call anim_reset_effects
     mov dword [need_redraw], 1
     jmp .main_loop
 
@@ -173,6 +177,7 @@ _start:
     jmp .main_loop
 
 .menu_to_settings:
+    call anim_reset_effects
     mov dword [state], STATE_SETTINGS
     call settings_run
     cmp dword [state], STATE_QUIT
@@ -182,6 +187,7 @@ _start:
     jmp .main_loop
 
 .menu_to_timer:
+    call anim_reset_effects
     call timer_run
     cmp dword [state], STATE_QUIT
     je .handle_exit
@@ -189,6 +195,7 @@ _start:
     jmp .main_loop
 
 .menu_to_habits:
+    call anim_reset_effects
     call habits_run
     cmp dword [state], STATE_QUIT
     je .handle_exit
@@ -198,6 +205,7 @@ _start:
     jmp .main_loop
 
 .menu_to_journal:
+    call anim_reset_effects
     call journal_run
     cmp dword [state], STATE_QUIT
     je .handle_exit

@@ -639,6 +639,22 @@ section .data
         dd glyph_ascii_bar_full, glyph_ascii_bar_empty
         dd glyph_ascii_sparkle
 
+    ; Task V7 Animation Strings & Tables
+    cat_tail_0:                 db " > ^ < ", CHAR_NULL
+    cat_tail_1:                 db " > ^ <~", CHAR_NULL
+    cat_tail_2:                 db "~> ^ < ", CHAR_NULL
+    cat_tail_table:             dd cat_tail_0, cat_tail_1, cat_tail_2
+
+    cat_eyes_blink:             db "( -.- )", CHAR_NULL
+
+    title_wave_slots:           db SLOT_TITLE, SLOT_ACCENT, SLOT_CAT, SLOT_TEXT
+    TITLE_WAVE_SLOTS_LEN        equ 4
+
+    anim_zz_str_z:              db "z", CHAR_NULL
+    anim_zz_str_Z:              db "Z", CHAR_NULL
+    anim_zz_str_zZ:             db "zZ", CHAR_NULL
+    anim_zz_spaces:             db "  ", CHAR_NULL
+
 section .bss
 
     ; Settings UI state tracking
@@ -650,3 +666,30 @@ section .bss
 
     ; Screen bottom row tracking for clearing stale cells
     ui_screen_bottom_row:       resd 1
+
+    ; Task V7: Animation Engine State & Storage (PRD_V2 §12)
+    anim_prng_seed:             resd 1          ; LCG PRNG 32-bit state
+    anim_frame_count:           resd 1          ; 100ms animation frame counter
+    anim_throttle_count:        resd 1          ; Ticks since last animation write
+    anim_dirty_flags:           resd 1          ; Bitmask of dirty regions
+
+    ; Effect States
+    anim_cat_blink_state:       resd 1          ; 0 = normal eyes, 1 = blink (closed)
+    anim_cat_tail_state:        resd 1          ; 0..2 tail pose index
+    anim_title_wave_offset:     resd 1          ; 0..3 color wave index
+    anim_star_twinkle_state:    resd 1          ; 0..3 star twinkle state
+    anim_shimmer_pos:           resd 1          ; 0..29 progress bar shimmer index
+    anim_zz_phase:              resd 1          ; 0..4 break zZ phase
+    anim_zz_old_x:              resd 1          ; Old column of zZ garnish
+    anim_zz_old_y:              resd 1          ; Old row of zZ garnish
+
+    ; Confetti particle storage (20 particles * 40 bytes = 800 bytes)
+    anim_confetti_particles:    resb CONFETTI_MAX * PARTICLE_SIZE
+
+    ; Heart-pop effect state
+    heart_pop_active:           resd 1          ; 1 = active, 0 = inactive
+    heart_pop_x:                resd 1          ; Column
+    heart_pop_y:                resd 1          ; Row
+    heart_pop_old_x:            resd 1          ; Old column (for erasing)
+    heart_pop_old_y:            resd 1          ; Old row (for erasing)
+    heart_pop_life:             resd 1          ; Remaining lifetime

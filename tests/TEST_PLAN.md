@@ -120,6 +120,22 @@ For manual test cases:
 | TC-54 | Deletion failure safety on blocked temporary file (PRD v2 §7) | O3, O4 | Directory `mkdir journal.tmp` exists | 1. Attempt to delete entry | Deletion fails cleanly. Status row displays `Could not delete`. Original `journal.txt` is preserved byte-for-byte; directory `journal.tmp` is untouched. | | |
 | TC-55 | Large file chunked backward paging and deletion (PRD v2 §7) | O3, O4 | Journal file > 16 KB | 1. Press `PgUp` repeatedly<br>2. Delete an entry from an older chunk | Successfully navigates older chunks; deletes physical entry from disk at correct byte offset; remaining file contents and timestamps stay intact. | | |
 | TC-56 | Ctrl+C terminal restoration across all journal prompts (PRD v2 §7, §14) | O3, O4 | At list, in full view, or delete prompt | 1. Press `Ctrl+C` | Terminal cleanly restored: cooked mode re-enabled, alternate screen dismissed, cursor shown, shell exit code 0 or 130. | | |
+| TC-57 | Cohesive dashboard elements and daily greetings (PRD v2 §4, §13) | O5 | Main menu displayed | 1. Inspect row 4 greeting & row 6 tip | Deterministic time-of-day greeting and daily cozy tip displayed with clean formatting. | | |
+| TC-58 | Pomodoro cycle dots and [PAUSED] status badge (PRD v2 §4, §5) | O1, O5 | Timer active and paused | 1. Inspect row 3 cycle dots<br>2. Press `P` | Session dots reflect cycle position (● filled, ○ empty); `[PAUSED]` badge renders cleanly. | | |
+| TC-59 | Strict 7-bit ASCII mode output purity (PRD v2 §3, FR-V8) | O4, O5 | Settings `charset=1` (ASCII mode) | 1. Visit Menu, Timer, Habits, Journal, Settings | Output contains strictly bytes in range `0x00..0x7F`. Zero bytes $\ge 0x80$ emitted. | | |
+| TC-60 | UTF-8 rounded borders across all 5 screens (PRD v2 §3, FR-V7) | O5 | Default UTF-8 mode | 1. Visit Menu, Timer, Habits, Journal, Settings | Top and bottom borders use rounded corner glyphs `╭`, `╮`, `╰`, `╯` with `─` and `│`. | | |
+| TC-61 | Animation write throttling ceiling (<= 5 writes/s) (PRD v2 §8, FR-V32) | O1, O4 | Animation enabled in menu and timer | 1. Run under `strace -e trace=write`<br>2. Monitor 1-second write count | At most 5 animation-driven writes emitted per second due to 200ms flush throttling. | | |
+| TC-62 | Integer-only LCG pseudo-random generator (PRD v2 §8) | O4 | Linux environment | 1. Launch Pawmodoro repeatedly | PRNG seeded from `time_now`. Uses 32-bit `MUL` with modulo $2^{32}$ recurrence; produces deterministic sequences for fixed seed. | | |
+| TC-63 | Cat blink and tail-wag animation (PRD v2 §8) | O5 | Main menu or active timer | 1. Observe cat over 5 seconds | Cat eyes blink closed every 3.0 seconds for 200 ms. Tail cycles 3 distinct poses every 300 ms. | | |
+| TC-64 | Menu title color wave and twinkling stars (PRD v2 §8) | O5 | Main menu active | 1. Observe menu title and garnish | Title characters cycle across active theme slots without hardcoded ANSI escapes. Two star garnishes twinkle without corrupting text. | | |
+| TC-65 | Progress bar shimmer visual overlay (PRD v2 §8) | O1, O5 | Active timer focus countdown | 1. Observe 30-cell progress bar | Shimmer highlight traverses filled progress bar cells without altering elapsed time or percentage. | | |
+| TC-66 | Break-time rising "zZ" garnish (PRD v2 §8) | O1, O5 | Timer in Short/Long Break | 1. Complete focus session or enter break | Floating "zZ" garnish rises from cat sleeping area over time and cleans up before next phase. | | |
+| TC-67 | Confetti burst upon natural focus completion (PRD v2 §8) | O1, O5 | Demo mode ON, focus timer | 1. Allow focus countdown to naturally reach 0 | 20 confetti particles burst upward and fall with integer gravity simulation. Particles expire cleanly. Skipped focus does not spawn confetti. | | |
+| TC-68 | Heart-pop effect on successful habit check-in (PRD v2 §8) | O2, O5 | Habits tracker screen | 1. Press `1` to check in habit | Heart glyph floats upward near checked-in habit row over 600 ms and clears. Rejected/duplicate check-ins do not trigger effect. | | |
+| TC-69 | Reduce motion (anim=0) complete suppression (PRD v2 §8, FR-V31) | O4, O5 | Settings `anim=0` | 1. Observe menu idle under strace | Exactly 0 writes emitted while idle. All animation effects frozen; static canonical visuals restored immediately. | | |
+| TC-70 | Terminal size gate (< 80x24) animation freeze (PRD v2 §2, §8) | O4, O5 | Terminal resized to 70x20 | 1. Resize during active animation | Dimension gate screen displayed; all animation simulation, drawing, and flushes completely suspended. | | |
+| TC-71 | Single sys_write per composed partial redraw frame (PRD v2 §8, FR-V30) | O4, O5 | Multiple dirty animation regions | 1. Run under `strace -e trace=write` during menu/timer animation | Exactly one `sys_write` emitted per composed animation frame, aggregating all dirty regions. | | |
+| TC-72 | Timer pause freezes animation without blocking input (PRD v2 §8) | O1, O5 | Timer running | 1. Press `P` to pause timer | Countdown and timer animation freeze. Key handling remains responsive; resuming unfreezes animation. | | |
 
 ---
 
@@ -133,20 +149,21 @@ The automated smoke test script (`tests/smoke.sh`) provides headless regression 
 | Check 2: Invalid Keys Ignored | TC-02, TC-46 |
 | Check 3: Demo Mode Toggle | TC-08 |
 | Check 4: Timer Start & Layout | TC-09 |
-| Check 5: Timer Pause & Resume | TC-10 |
-| Check 6: Natural Focus End & Quick Note | TC-15, TC-16 |
-| Check 7: Break Transition & Skip | TC-11, TC-12 |
+| Check 5: Timer Pause & Resume | TC-10, TC-72 |
+| Check 6: Natural Focus End & Quick Note | TC-15, TC-16, TC-67 |
+| Check 7: Break Transition & Skip | TC-11, TC-12, TC-66 |
 | Check 8: Menu Return & Stats 12B Check | TC-13, TC-21 |
-| Check 9: Habits Add, Check-in & 52B Check | TC-25, TC-29, TC-32, TC-33 |
+| Check 9: Habits Add, Check-in & 52B Check | TC-25, TC-29, TC-32, TC-33, TC-68 |
 | Check 10: Journal Add, View, Full View, Delete Cancel & Confirm | TC-36, TC-39, TC-42, TC-44, TC-50, TC-51, TC-52, TC-53 |
 | Check 11: Corrupted Data Resilience | TC-23, TC-34 |
 | Check 12: Raw Mode Ctrl+C & Term Restoration | TC-04, TC-56 |
 | Check 13: Cooked Mode Ctrl+C (Exit 130) | TC-35, TC-45, TC-56 |
 | Check 14: Non-TTY Stdin Rejection (Exit 1) | TC-05 |
-| Check 15: Terminal Size Gate (< 80x24) & Auto-Recovery | TC-06, TC-07 |
+| Check 15: Terminal Size Gate (< 80x24) & Auto-Recovery | TC-06, TC-07, TC-70 |
 | Check 16: Zero Screen Overflow (> ui_w Columns) | TC-42, TC-46 |
 | Check 17: Settings Navigation, Color Editor, Immediate Save & 24B Check | TC-54, TC-55 |
 | Check 18: Cohesive Visual Elements (Greeting, Daily Tip, Cycle Dots, [PAUSED] Badge) | TC-57, TC-58 |
 | Check 19: Strict 7-bit ASCII Fallback (Zero Bytes >= 0x80 across 5 Screens) | TC-59 |
 | Check 20: UTF-8 Rounded Border Geometry (╭, ╰, ─, │ across 5 Screens) | TC-60 |
+| Check 21: Animation Write Throttling (<= 5 fps) & Reduce Motion 0 Idle Writes | TC-61, TC-69, TC-71 |
 | Extended (`--full`): 4-Session Pomodoro Cycle | TC-20 |

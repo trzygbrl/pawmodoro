@@ -63,6 +63,7 @@ CHAR_SPACE              equ 32          ; Space character (' ')
 CHAR_HASH               equ 35          ; Hash / pound symbol ('#')
 CHAR_PERCENT            equ 37          ; Percent symbol ('%')
 CHAR_PLUS               equ 43          ; Plus symbol ('+')
+CHAR_ASTERISK           equ 42          ; Asterisk symbol ('*')
 CHAR_MINUS              equ 45          ; Hyphen/dash symbol ('-')
 CHAR_ZERO               equ 48          ; ASCII digit zero ('0')
 CHAR_COLON              equ 58          ; Colon symbol (':')
@@ -583,3 +584,40 @@ GLYPH_SPARKLE           equ 14          ; ✦ or *
 GLYPH_COUNT             equ 15
 
 COZY_TIPS_COUNT         equ 7           ; Number of deterministic daily cozy tips
+
+; =============================================================================
+; Task V7 Additions: Animation Engine & Particle System (PRD_V2 §8, §13.5)
+; =============================================================================
+ANIM_THROTTLE_TICKS     equ 2           ; 2 ticks (200ms) = 5 fps maximum write rate
+ANIM_PRNG_MULT          equ 1664525     ; Standard Numerical Recipes LCG multiplier
+ANIM_PRNG_INC           equ 1013904223  ; Standard Numerical Recipes LCG increment
+ANIM_PRNG_FALLBACK_SEED equ 0x12345678  ; Deterministic nonzero fallback seed
+
+; Animation Region Dirty Flags Bitmask
+ANIM_DIRTY_CAT          equ 0x01        ; Cat art region dirty
+ANIM_DIRTY_TITLE        equ 0x02        ; Menu title & stars region dirty
+ANIM_DIRTY_PROGRESS     equ 0x04        ; Progress bar shimmer dirty
+ANIM_DIRTY_PARTICLES    equ 0x08        ; Confetti / heart-pop / zZ garnish dirty
+
+; Effect Timings (in 100ms ticks)
+ANIM_BLINK_INTERVAL     equ 30          ; Blink every 30 ticks (3.0 seconds)
+ANIM_BLINK_DURATION     equ 2           ; Blink duration = 2 ticks (200 ms)
+ANIM_TAIL_PERIOD        equ 3           ; Tail pose changes every 3 ticks (300 ms)
+ANIM_TAIL_POSES         equ 3           ; 3 distinct tail poses (0, 1, 2)
+ANIM_SHIMMER_PERIOD     equ 2           ; Shimmer advances every 2 ticks (200 ms)
+ANIM_ZZ_PERIOD          equ 3           ; Break zZ step period (300 ms)
+ANIM_HEART_POP_LIFE     equ 6           ; Heart-pop lifetime = 6 ticks (600 ms)
+
+; Particle System Constants
+CONFETTI_MAX            equ 20          ; 20 confetti particles
+PARTICLE_OFF_X          equ 0           ; Column (dword)
+PARTICLE_OFF_Y          equ 4           ; Row (dword)
+PARTICLE_OFF_OLD_X      equ 8           ; Previous column for erasing (dword)
+PARTICLE_OFF_OLD_Y      equ 12          ; Previous row for erasing (dword)
+PARTICLE_OFF_VX         equ 16          ; Signed horizontal velocity (dword)
+PARTICLE_OFF_VY         equ 20          ; Signed vertical velocity (dword)
+PARTICLE_OFF_LIFE       equ 24          ; Remaining lifetime in ticks (dword)
+PARTICLE_OFF_ACTIVE     equ 28          ; 1 = active, 0 = inactive (dword)
+PARTICLE_OFF_GLYPH      equ 32          ; Glyph ID: GLYPH_STAR.. (dword)
+PARTICLE_OFF_SLOT       equ 36          ; Color slot ID (dword)
+PARTICLE_SIZE           equ 40          ; 40 bytes per particle struct

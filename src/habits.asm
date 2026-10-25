@@ -650,6 +650,9 @@ habits_check_in:
 
 .chk_save_ok:
     mov dword [habit_msg], habit_msg_checked_in
+    mov eax, [esp]              ; Key code (KEY_1..KEY_8)
+    sub eax, KEY_1              ; EAX = 0-based habit index (0..7)
+    call anim_on_habit_checkin  ; Trigger heart-pop on successful check-in (Task V7)
     jmp .chk_finish
 
 .chk_already_done:
@@ -912,10 +915,9 @@ habits_run:
     mov dword [need_redraw], 0
 
 .habits_wait_key:
-    ; Low-CPU 50ms sleep via sys_nanosleep while polling for terminal resize (PRD v2 §2)
-    mov dword [timespec], 0
-    mov dword [timespec + 4], NANOSLEEP_50MS
-    syscall SYS_NANOSLEEP, timespec, 0
+    ; Low-CPU 100ms sleep while ticking animation (heart-pop effect) and polling resize
+    call time_sleep_100ms
+    call anim_tick
 
     call term_size_ok
     test eax, eax
@@ -981,5 +983,6 @@ habits_run:
     jmp .habits_loop
 
 .habits_exit:
+    call anim_reset_effects
     restore_regs
     ret

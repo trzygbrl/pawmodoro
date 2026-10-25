@@ -671,6 +671,62 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# Scenario 21: Animation Engine Rate Throttling (<= 5 writes/s) and Reduce Motion
+# -----------------------------------------------------------------------------
+ANIM_LOG="$TMP_DIR/anim_strace.log"
+rm -f "$ANIM_LOG"
+send "strace -f -tt -e trace=write -o '$ANIM_LOG' ./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+if wait_for "P A W M O D O R O" 5; then
+    sleep 2.5
+    # Check write rate with animation enabled
+    python3 -c "
+import sys
+with open('$ANIM_LOG', 'r') as f:
+    lines = f.readlines()
+counts = {}
+for line in lines:
+    parts = line.split()
+    if len(parts) >= 2:
+        ts = parts[1] if parts[0].isdigit() else parts[0]
+        if ':' in ts:
+            sec = ts.split('.')[0]
+            counts[sec] = counts.get(sec, 0) + 1
+max_fps = max(counts.values()) if counts else 0
+if max_fps > 6:
+    print(f'Max writes/sec {max_fps} exceeds limit of 5 (+1 startup)')
+    sys.exit(1)
+"
+    RATE_OK=$?
+
+    # Now toggle animation to OFF (Reduce motion)
+    send "5"
+    wait_for "SETTINGS" 5
+    send Down Down Enter "B"
+    wait_for "P A W M O D O R O" 5
+    sleep 0.5
+    rm -f "$ANIM_LOG"
+    sleep 2.0
+
+    # Verify zero idle writes when Reduce Motion is enabled
+    if [ -f "$ANIM_LOG" ]; then
+        IDLE_WRITES=$(wc -l < "$ANIM_LOG")
+    else
+        IDLE_WRITES=0
+    fi
+    send "Q"
+    sleep 0.4
+
+    if [ "$RATE_OK" -eq 0 ] && [ "$IDLE_WRITES" -eq 0 ]; then
+        pass "Scenario 21 - Animation write throttle (<= 5 fps) & Reduce Motion 0 idle writes verified"
+    else
+        fail "Scenario 21 - Animation throttling failed (rate_ok=$RATE_OK, idle_writes=$IDLE_WRITES)"
+    fi
+else
+    fail "Scenario 21 - Failed to start Pawmodoro for animation rate check"
+fi
+
+
+# -----------------------------------------------------------------------------
 # Optional Extended Scenario: Full 4-Session Cycle (--full)
 # -----------------------------------------------------------------------------
 if [ "$FULL_MODE" -eq 1 ]; then

@@ -544,6 +544,9 @@ timer_run:
     ; Low-CPU 100ms sleep via sys_nanosleep (FR-T5)
     call time_sleep_100ms
 
+    ; Event-driven animation tick (Task V7, PRD_V2 §8)
+    call anim_tick
+
     ; Non-blocking keyboard poll
     call key_poll
 
@@ -569,11 +572,13 @@ timer_run:
 
 .key_ctrl_c:
     ; Global quit: set STATE_QUIT and return to main shell
+    call anim_reset_effects
     mov dword [state], STATE_QUIT
     jmp .timer_exit
 
 .key_q:
     ; Stop timer: set STATE_MENU and return to main shell
+    call anim_reset_effects
     mov dword [state], STATE_MENU
     jmp .timer_exit
 
@@ -586,7 +591,8 @@ timer_run:
     jmp .tick_loop
 
 .key_s:
-    ; Skip current phase early
+    ; Skip current phase early (no confetti on skip!)
+    call anim_reset_effects
     call timer_skip_phase
     jmp .phase_entry
 
@@ -640,6 +646,7 @@ timer_run:
     ; Focus phase naturally completed (FR-T6, FR-T8)
     mov dword [focus_completed_flag], 1
     call stats_add_pomodoro
+    call anim_on_focus_complete ; Trigger confetti burst only on natural focus complete (Task V7)
 
     ; Render focus completion frame (mode 2) with bell in a single write
     mov eax, TIMER_FRAME_FOCUS_DONE
@@ -648,8 +655,14 @@ timer_run:
     call buf_str
     call buf_flush
 
-    ; Wait for user decision
-    call key_wait
+.focus_wait_decision:
+    ; Wait for user decision while continuing animation tick
+    call time_sleep_100ms
+    call anim_tick
+    call key_poll
+    cmp eax, KEY_NONE
+    je .focus_wait_decision
+
     cmp eax, KEY_CTRL_C
     je .key_ctrl_c
     cmp eax, KEY_Y
@@ -659,6 +672,8 @@ timer_run:
     jmp .advance_to_break
 
 .do_quick_note:
+    call anim_reset_effects
+
     ; Redraw frame with note prompt on row 8 (mode 3)
     mov eax, TIMER_FRAME_NOTE_PROMPT
     call timer_draw
@@ -710,14 +725,21 @@ timer_run:
 
 .break_natural_complete:
     ; Break phase naturally completed (FR-T6)
+    call anim_reset_effects
     mov eax, TIMER_FRAME_BREAK_DONE
     call timer_draw
     mov esi, ansi_bell
     call buf_str
     call buf_flush
 
-    ; Wait for user input: Q stops and returns to menu, any other key continues
-    call key_wait
+.break_wait_decision:
+    ; Wait for user input while ticking animation
+    call time_sleep_100ms
+    call anim_tick
+    call key_poll
+    cmp eax, KEY_NONE
+    je .break_wait_decision
+
     cmp eax, KEY_CTRL_C
     je .key_ctrl_c
     cmp eax, KEY_Q
@@ -725,10 +747,12 @@ timer_run:
 
 .advance_to_break:
     ; Advance phase and session counter
+    call anim_reset_effects
     call timer_advance_phase
     jmp .phase_entry
 
 .timer_exit:
+    call anim_reset_effects
     pop eax
     restore_regs
     ret
