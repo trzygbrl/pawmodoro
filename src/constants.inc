@@ -14,7 +14,9 @@ SYS_READ                equ 3           ; Read from file descriptor
 SYS_WRITE               equ 4           ; Write to file descriptor
 SYS_OPEN                equ 5           ; Open/create file
 SYS_CLOSE               equ 6           ; Close file descriptor
+SYS_UNLINK              equ 10          ; Delete a name and possibly the file it refers to
 SYS_TIME                equ 13          ; Get time in seconds since Unix epoch
+SYS_RENAME              equ 38          ; Change the name or location of a file
 SYS_IOCTL               equ 54          ; I/O control operation
 SYS_NANOSLEEP           equ 162         ; High-resolution sleep
 
@@ -97,7 +99,8 @@ OUT_BUF_SIZE            equ 8192        ; Terminal output frame buffer size
 IN_BUF_SIZE             equ 16          ; Raw keyboard input buffer size
 LINE_BUF_SIZE           equ 256         ; Line input editing buffer size
 FILE_BUF_SIZE           equ 512         ; File persistence I/O buffer size
-JRNL_BUF_SIZE           equ 4096        ; Journal viewing read buffer size
+JRNL_BUF_SIZE           equ 16384       ; Journal viewing read buffer size (16 KB, PRD v2 §7, §12)
+DEL_COPY_BUF_SIZE       equ 2048        ; Dedicated file deletion copy buffer size (2 KB, PRD v2 §7)
 TIMESPEC_SIZE           equ 8           ; struct timespec size (2 dwords: sec, nsec)
 
 ; =============================================================================
@@ -108,6 +111,9 @@ HABIT_NAME_MAX          equ 31          ; Maximum characters in a habit name
 HABIT_RECORD_SIZE       equ 48          ; Bytes per habit record in habits.dat
 JOURNAL_ENTRY_MAX       equ 200         ; Maximum characters per journal entry
 JOURNAL_VIEW_LINES      equ 10          ; Number of recent entries shown in view
+JRNL_MAX_ENTRIES        equ 32          ; Maximum cached entries in active viewing window
+JRNL_MAX_VISUAL_ROWS    equ 4           ; Maximum visual wrapped rows per entry
+UI_JRN_INDENT_COLS      equ 4           ; Continuation row indentation in columns
 SESSIONS_PER_CYCLE      equ 4           ; Completed focus sessions before long break
 
 ; =============================================================================

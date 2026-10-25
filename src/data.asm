@@ -23,6 +23,7 @@ section .data
     ansi_alt_off:           db CHAR_ESC, "[?1049l", CHAR_NULL   ; Switch to standard screen buffer
     ansi_reset:             db CHAR_ESC, "[0m", CHAR_NULL       ; Reset all attributes/colors
     ansi_bold:              db CHAR_ESC, "[1m", CHAR_NULL       ; Enable bold font weight
+    ansi_reverse:           db CHAR_ESC, "[7m", CHAR_NULL       ; Enable reverse video (highlighting)
     ansi_bell:              db CHAR_BELL, CHAR_NULL             ; Terminal audio bell (0x07)
 
     ; -------------------------------------------------------------------------
@@ -276,20 +277,27 @@ section .bss
     habit_msg:                  resd 1
 
 ; =============================================================================
-; Task 8 Journal Subsystem Data & Buffers (PRD §4.4, §4.5 FR-D1, FR-D4, §5)
+; Task 8 & V3 Journal Subsystem Data & Buffers (PRD §4.4, §4.5, PRD_V2 §7, §12)
 ; =============================================================================
 section .data
 
     ; File Paths (relative to current working directory)
     path_journal:               db "journal.txt", CHAR_NULL
+    path_journal_tmp:           db "journal.tmp", CHAR_NULL
 
     ; UI Strings & Help Prompts
-    jrnl_help:                  db "[N] New entry   [V] View recent   [B] Back", CHAR_NULL
+    jrnl_help:                  db "[Up/Dn] Move  [PgUp/Dn] Page  [Enter] View  [D] Del  [N] New  [B] Back", CHAR_NULL
+    jrnl_help_full:             db "[Enter / B] Back to list   [D] Delete entry", CHAR_NULL
+    jrnl_title_full:            db "JOURNAL - FULL ENTRY", CHAR_NULL
     jrnl_msg_initial_hint:      db "Press V to view recent entries.", CHAR_NULL
     jrnl_msg_empty:             db "No entries yet.", CHAR_NULL
     jrnl_msg_new_prompt:        db "New entry (max 200, Enter alone cancels): ", CHAR_NULL
+    jrnl_msg_del_prompt:        db "Delete this entry? (y/n)", CHAR_NULL
     jrnl_msg_saved:             db "Entry saved", CHAR_NULL
+    jrnl_msg_deleted:           db "Entry deleted", CHAR_NULL
+    jrnl_msg_could_not_delete:  db "Could not delete", CHAR_NULL
     jrnl_sep:                   db " | ", CHAR_NULL
+    jrnl_indent_str:            db "    ", CHAR_NULL
 
 section .bss
 
@@ -299,17 +307,35 @@ section .bss
     ; View state tracking (0 = unviewed/initial hint, 1 = recent entries loaded)
     jrnl_view_active:           resd 1
 
-    ; Number of bytes loaded into jrnl_buf during last tail read
+    ; Number of bytes loaded into jrnl_buf during active window read
     jrnl_bytes_loaded:          resd 1
 
-    ; Whether the loaded tail began in the middle of a file (file size > 4096)
+    ; Whether the loaded window began in the middle of a file (file size > window size)
     jrnl_tail_partial:          resd 1
 
-    ; Number of complete lines found in recent view (0..JOURNAL_VIEW_LINES)
+    ; Number of complete lines found in recent view (0..JRNL_MAX_ENTRIES)
     jrnl_line_count:            resd 1
 
-    ; Table of up to 10 (start_ptr, length) pairs for recent entries (10 * 8 = 80 bytes)
+    ; Table of up to 10 (start_ptr, length) pairs for legacy compatibility
     jrnl_lines:                 resd (JOURNAL_VIEW_LINES * 2)
+
+    ; V3 Journal state & navigation variables (PRD_V2 §7, §12)
+    jrnl_sel_idx:               resd 1          ; Selected entry index (0..jrnl_line_count - 1)
+    jrnl_top_idx:               resd 1          ; First visible entry index in list view
+    jrnl_window_offset:         resd 1          ; Absolute file byte offset of jrnl_buf[0]
+    jrnl_file_size:             resd 1          ; Total file size in bytes
+    jrnl_full_view:             resd 1          ; 1 = Full entry modal view, 0 = List view
+    jrnl_confirm_del:           resd 1          ; 1 = Delete confirmation active, 0 = normal
+
+    ; Table of up to JRNL_MAX_ENTRIES (32) entry records (4 dwords each = 16 bytes per entry):
+    ; Offset +0:  entry_start_ptr (pointer into jrnl_buf)
+    ; Offset +4:  entry_text_len  (length in bytes excluding LF)
+    ; Offset +8:  entry_file_off  (absolute byte offset in journal.txt)
+    ; Offset +12: entry_file_len  (total byte length in journal.txt including LF)
+    jrnl_entries:               resd (JRNL_MAX_ENTRIES * 4)
+
+    ; Dedicated 2 KB copy buffer for atomic file deletion (PRD_V2 §7, §12)
+    del_copy_buf:               resb DEL_COPY_BUF_SIZE
 
 ; =============================================================================
 ; Task 9 Integration, Signals, Size Gate, and Status Data & Buffers

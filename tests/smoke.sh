@@ -326,9 +326,36 @@ if wait_for "JOURNAL" 5; then
                     EXPECTED_MIN0=$(date -u -d '+8 hours' '+%Y-%m-%d %H:%M')
                     EXPECTED_MIN1=$(date -u -d '+8 hours - 1 minute' '+%Y-%m-%d %H:%M')
                     if echo "$JRNL_LINE" | grep -q "$EXPECTED_MIN0" || echo "$JRNL_LINE" | grep -q "$EXPECTED_MIN1"; then
-                        send "B"
-                        wait_for "P A W M O D O R O" 5
-                        pass "Scenario 10 - Journal add, view, and UTC+8 timestamp verified"
+                        # Test full-entry view toggle via Enter
+                        send Enter
+                        if wait_for "JOURNAL - FULL ENTRY" 5; then
+                            send "B"
+                            wait_for "JOURNAL" 5
+                            # Test deletion cancel via N
+                            send "D"
+                            if wait_for "Delete this entry? (y/n)" 5; then
+                                send "N"
+                                sleep 0.2
+                                # Test deletion confirm via Y
+                                send "D"
+                                if wait_for "Delete this entry? (y/n)" 5; then
+                                    send "Y"
+                                    if wait_for "Entry deleted" 5; then
+                                        send "B"
+                                        wait_for "P A W M O D O R O" 5
+                                        pass "Scenario 10 - Journal add, view, full view, delete cancel/confirm verified"
+                                    else
+                                        fail "Scenario 10 - Deletion failed to show 'Entry deleted'"
+                                    fi
+                                else
+                                    fail "Scenario 10 - Key D did not show delete prompt"
+                                fi
+                            else
+                                fail "Scenario 10 - Key D did not show delete prompt"
+                            fi
+                        else
+                            fail "Scenario 10 - Enter did not open full entry view"
+                        fi
                     else
                         fail "Scenario 10 - journal.txt timestamp mismatch: '$JRNL_LINE' vs expected '$EXPECTED_MIN0'"
                     fi

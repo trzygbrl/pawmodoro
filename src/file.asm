@@ -179,3 +179,235 @@ file_append:
     call file_write_common
     restore_regs
     ret
+
+;=============================================================================
+; Procedure: file_delete_range
+; Purpose:   Safely removes the byte range [start, end) from the file at path ESI.
+;            Copies pre-range and post-range chunks through the dedicated 2 KB
+;            copy buffer (del_copy_buf) into temporary file journal.tmp, then
+;            atomically renames journal.tmp over the original file (SYS_RENAME).
+;            On any failure before a successful rename, closes descriptors,
+;            unlinks journal.tmp (SYS_UNLINK), and leaves the original file
+;            byte-identical.
+; IN:        ESI = Pointer to NUL-terminated file path string,
+;            EAX = Inclusive start byte offset (0-based),
+;            EDX = Exclusive end byte offset (0-based)
+; OUT:       EAX = 0 (FILE_OK) on success, -1 (FILE_ERR) on error
+; CLOBBERS:  EAX
+;=============================================================================
+file_delete_range:
+    push ebp
+    mov ebp, esp
+    sub esp, 32                 ; Local stack variables:
+                                ; [ebp - 4]:  start_off
+                                ; [ebp - 8]:  end_off
+                                ; [ebp - 12]: file_size
+                                ; [ebp - 16]: fd_in
+                                ; [ebp - 20]: fd_out
+                                ; [ebp - 24]: orig_path
+                                ; [ebp - 28]: rem_bytes
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+
+    mov [ebp - 4], eax          ; start_off
+    mov [ebp - 8], edx          ; end_off
+    mov [ebp - 24], esi         ; orig_path
+
+    ; 1. Sanity check: reject negative offsets or start > end
+    cmp eax, 0
+    jl .del_err_param
+    cmp edx, 0
+    jl .del_err_param
+    cmp eax, edx
+    ja .del_err_param
+
+    ; 2. Open original file read-only (sys_open)
+    mov ebx, [ebp - 24]
+    mov ecx, O_RDONLY
+    xor edx, edx
+    syscall SYS_OPEN, ebx, ecx, edx
+    test eax, eax
+    js .del_err_param           ; Open failed (file missing/unreadable)
+    mov [ebp - 16], eax         ; fd_in
+
+    ; 3. Query file size via sys_lseek(fd_in, 0, SEEK_END)
+    mov ebx, [ebp - 16]
+    xor ecx, ecx
+    mov edx, SEEK_END
+    syscall SYS_LSEEK, ebx, ecx, edx
+    test eax, eax
+    js .del_err_close_in
+    mov [ebp - 12], eax         ; file_size
+
+    ; 4. Validate offsets against actual file_size
+    mov eax, [ebp - 4]          ; start_off
+    cmp eax, [ebp - 12]
+    ja .del_err_close_in
+    mov edx, [ebp - 8]          ; end_off
+    cmp edx, [ebp - 12]
+    ja .del_err_close_in
+
+    ; Check if start == end (empty range: no-op success)
+    cmp eax, edx
+    je .del_noop
+
+    ; 5. Rewind fd_in to beginning of file (offset 0)
+    mov ebx, [ebp - 16]
+    xor ecx, ecx
+    mov edx, SEEK_SET
+    syscall SYS_LSEEK, ebx, ecx, edx
+    test eax, eax
+    js .del_err_close_in
+
+    ; 6. Create/open temporary file: journal.tmp
+    mov ebx, path_journal_tmp
+    mov ecx, O_SAVE_FLAGS       ; O_WRONLY | O_CREAT | O_TRUNC (0x241)
+    mov edx, FILE_MODE_0644     ; 0644 octal (420 dec)
+    syscall SYS_OPEN, ebx, ecx, edx
+    test eax, eax
+    js .del_err_close_in        ; Create temp failed: do NOT unlink (e.g. dir exists)
+    mov [ebp - 20], eax         ; fd_out
+
+    ; 7. Phase 1: Copy bytes before start offset
+    mov eax, [ebp - 4]          ; rem_bytes = start_off
+    mov [ebp - 28], eax
+
+.copy_pre_loop:
+    mov eax, [ebp - 28]
+    test eax, eax
+    jz .copy_pre_done
+
+    mov ecx, DEL_COPY_BUF_SIZE  ; 2048
+    cmp eax, ecx
+    jbe .copy_pre_chunk
+    mov eax, ecx
+
+.copy_pre_chunk:
+    ; Read chunk from fd_in
+    mov ebx, [ebp - 16]         ; fd_in
+    mov ecx, del_copy_buf
+    mov edx, eax                ; bytes to read
+    syscall SYS_READ, ebx, ecx, edx
+    test eax, eax
+    jle .del_fail_cleanup       ; Read error or unexpected EOF
+
+    ; Write chunk to fd_out
+    push eax                    ; Preserve bytes read
+    mov ebx, [ebp - 20]         ; fd_out
+    mov ecx, del_copy_buf
+    mov edx, eax                ; bytes to write
+    syscall SYS_WRITE, ebx, ecx, edx
+    pop ecx                     ; Restore expected byte count
+    cmp eax, ecx
+    jne .del_fail_cleanup       ; Write error or short write
+
+    sub [ebp - 28], eax         ; rem_bytes -= bytes written
+    jmp .copy_pre_loop
+
+.copy_pre_done:
+    ; 8. Phase 2: Seek fd_in past deleted range to end_off
+    mov ebx, [ebp - 16]         ; fd_in
+    mov ecx, [ebp - 8]          ; end_off
+    mov edx, SEEK_SET
+    syscall SYS_LSEEK, ebx, ecx, edx
+    test eax, eax
+    js .del_fail_cleanup
+
+    ; 9. Phase 3: Copy bytes after end offset: rem_bytes = file_size - end_off
+    mov eax, [ebp - 12]         ; file_size
+    sub eax, [ebp - 8]          ; - end_off
+    mov [ebp - 28], eax
+
+.copy_post_loop:
+    mov eax, [ebp - 28]
+    test eax, eax
+    jz .copy_post_done
+
+    mov ecx, DEL_COPY_BUF_SIZE  ; 2048
+    cmp eax, ecx
+    jbe .copy_post_chunk
+    mov eax, ecx
+
+.copy_post_chunk:
+    ; Read chunk from fd_in
+    mov ebx, [ebp - 16]         ; fd_in
+    mov ecx, del_copy_buf
+    mov edx, eax
+    syscall SYS_READ, ebx, ecx, edx
+    test eax, eax
+    jle .del_fail_cleanup
+
+    ; Write chunk to fd_out
+    push eax
+    mov ebx, [ebp - 20]         ; fd_out
+    mov ecx, del_copy_buf
+    mov edx, eax
+    syscall SYS_WRITE, ebx, ecx, edx
+    pop ecx
+    cmp eax, ecx
+    jne .del_fail_cleanup
+
+    sub [ebp - 28], eax
+    jmp .copy_post_loop
+
+.copy_post_done:
+    ; 10. Close both file descriptors unconditionally
+    mov ebx, [ebp - 20]         ; fd_out
+    syscall SYS_CLOSE, ebx
+    mov ebx, [ebp - 16]         ; fd_in
+    syscall SYS_CLOSE, ebx
+
+    ; 11. Atomic rename: rename(path_journal_tmp, orig_path)
+    mov ebx, path_journal_tmp   ; oldpath
+    mov ecx, [ebp - 24]         ; newpath
+    syscall SYS_RENAME, ebx, ecx
+    test eax, eax
+    jnz .del_rename_failed
+
+    ; Success: return 0
+    xor eax, eax
+    jmp .del_return
+
+.del_rename_failed:
+    ; Unlink temp file on rename failure
+    mov ebx, path_journal_tmp
+    syscall SYS_UNLINK, ebx
+    mov eax, FILE_ERR
+    jmp .del_return
+
+.del_fail_cleanup:
+    ; Close descriptors and unlink temp file
+    mov ebx, [ebp - 20]
+    syscall SYS_CLOSE, ebx
+    mov ebx, [ebp - 16]
+    syscall SYS_CLOSE, ebx
+    mov ebx, path_journal_tmp
+    syscall SYS_UNLINK, ebx
+    mov eax, FILE_ERR
+    jmp .del_return
+
+.del_noop:
+    mov ebx, [ebp - 16]
+    syscall SYS_CLOSE, ebx
+    xor eax, eax                ; Success (no-op)
+    jmp .del_return
+
+.del_err_close_in:
+    mov ebx, [ebp - 16]
+    syscall SYS_CLOSE, ebx
+
+.del_err_param:
+    mov eax, FILE_ERR
+
+.del_return:
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    mov esp, ebp
+    pop ebp
+    ret

@@ -6,3 +6,4 @@ build/
 
 # Journal entries log file
 journal.txt
+journal.tmp
