@@ -766,6 +766,11 @@ journal_draw_entry:
     test ecx, ecx
     jz .emit_row1_done
     mov al, [esi]
+    cmp byte [setting_charset], 1
+    jne .row1_not_ascii
+    cmp al, 128
+    jae .row1_san
+.row1_not_ascii:
     cmp al, CHAR_SPACE
     jb .row1_san
     cmp al, 127
@@ -871,6 +876,11 @@ journal_draw_entry:
     test ecx, ecx
     jz .emit_cont_text_done
     mov al, [esi]
+    cmp byte [setting_charset], 1
+    jne .cont_not_ascii
+    cmp al, 128
+    jae .cont_san
+.cont_not_ascii:
     cmp al, CHAR_SPACE
     jb .cont_san
     cmp al, 127
@@ -1653,6 +1663,8 @@ journal_run:
 
 .key_d:
     call journal_delete_prompt
+    cmp dword [state], STATE_QUIT
+    je .journal_exit
     jmp .journal_loop
 
 .key_n:

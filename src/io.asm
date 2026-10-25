@@ -622,6 +622,12 @@ buf_str_clip:
     mov ecx, eax
 .emit_bytes_loop:
     mov al, [esi]
+    cmp byte [setting_charset], 1
+    jne .emit_byte_raw
+    cmp al, 128
+    jb .emit_byte_raw
+    mov al, CHAR_QUESTION
+.emit_byte_raw:
     call buf_char
     inc esi
     dec ecx

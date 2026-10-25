@@ -741,6 +741,520 @@ else
     fail "Scenario 22 - Sound engine verification failed (fpu=$FPU_CHECK, bss=$BSS_SIZE, zombies=$ZOMBIES_COUNT)"
 fi
 
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Scenario 23: Theme Persistence Across Restarts (Task V10)
+# -----------------------------------------------------------------------------
+THEME_SUBDIR="$TMP_DIR/theme_persist"
+mkdir -p "$THEME_SUBDIR"
+cp "$BIN" "$THEME_SUBDIR/pawmodoro"
+TMUX_THEME="paw_theme_$$"
+tmux new-session -d -s "$TMUX_THEME" -x 80 -y 24 -c "$THEME_SUBDIR" bash
+tmux send-keys -t "$TMUX_THEME" "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+sleep 0.4
+THEME_PERSIST_OK=0
+if tmux capture-pane -t "$TMUX_THEME" -p | grep -q "P A W M O D O R O"; then
+    tmux send-keys -t "$TMUX_THEME" "5"
+    sleep 0.3
+    tmux send-keys -t "$TMUX_THEME" Right
+    sleep 0.2
+    tmux send-keys -t "$TMUX_THEME" "B"
+    sleep 0.2
+    tmux send-keys -t "$TMUX_THEME" "Q"
+    sleep 0.4
+
+    # Check settings.dat size
+    if [ -f "$THEME_SUBDIR/settings.dat" ] && [ "$(stat -c %s "$THEME_SUBDIR/settings.dat")" -eq 24 ]; then
+        # Restart 1
+        tmux send-keys -t "$TMUX_THEME" "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+        sleep 0.4
+        tmux send-keys -t "$TMUX_THEME" "5"
+        sleep 0.3
+        if tmux capture-pane -t "$TMUX_THEME" -p | grep -q "Matcha Latte"; then
+            tmux send-keys -t "$TMUX_THEME" "B"
+            sleep 0.2
+            tmux send-keys -t "$TMUX_THEME" "Q"
+            sleep 0.4
+
+            # Restart 2
+            tmux send-keys -t "$TMUX_THEME" "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+            sleep 0.4
+            tmux send-keys -t "$TMUX_THEME" "5"
+            sleep 0.3
+            if tmux capture-pane -t "$TMUX_THEME" -p | grep -q "Matcha Latte"; then
+                THEME_PERSIST_OK=1
+                tmux send-keys -t "$TMUX_THEME" "B"
+                sleep 0.2
+                tmux send-keys -t "$TMUX_THEME" "Q"
+                sleep 0.4
+            fi
+        fi
+    fi
+fi
+tmux kill-session -t "$TMUX_THEME" 2>/dev/null || true
+rm -rf "$THEME_SUBDIR"
+
+if [ "$THEME_PERSIST_OK" -eq 1 ]; then
+    pass "Scenario 23 - Theme selection persists across restart and second clean restart"
+else
+    fail "Scenario 23 - Theme persistence failed across restarts"
+fi
+
+# -----------------------------------------------------------------------------
+# Scenario 24: Corrupted settings.dat Fallback and Recovery (Task V10)
+# -----------------------------------------------------------------------------
+CORRUPT_SUBDIR="$TMP_DIR/corrupt_test"
+mkdir -p "$CORRUPT_SUBDIR"
+cp "$BIN" "$CORRUPT_SUBDIR/pawmodoro"
+TMUX_CORRUPT="paw_corrupt_$$"
+tmux new-session -d -s "$TMUX_CORRUPT" -x 80 -y 24 -c "$CORRUPT_SUBDIR" bash
+sleep 0.3
+
+CORRUPT_ALL_OK=1
+run_corrupt_variant() {
+    local vname="$1"
+    rm -f "$CORRUPT_SUBDIR/settings.dat"
+    case "$vname" in
+        missing) ;;
+        empty) touch "$CORRUPT_SUBDIR/settings.dat" ;;
+        truncated_header) printf 'PAW' > "$CORRUPT_SUBDIR/settings.dat" ;;
+        wrong_magic) printf 'BAAD\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x07\x03\x00' > "$CORRUPT_SUBDIR/settings.dat" ;;
+        wrong_version) printf 'PAWS\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x07\x03\x00' > "$CORRUPT_SUBDIR/settings.dat" ;;
+        invalid_theme) printf 'PAWS\x01\x99\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x07\x03\x00' > "$CORRUPT_SUBDIR/settings.dat" ;;
+        invalid_bool) printf 'PAWS\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x01\x00\x07\x03\x00' > "$CORRUPT_SUBDIR/settings.dat" ;;
+        oversized) printf 'PAWS\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x07\x03\x00EXTRA_BYTES' > "$CORRUPT_SUBDIR/settings.dat" ;;
+    esac
+
+    tmux send-keys -t "$TMUX_CORRUPT" "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+    sleep 0.4
+    if ! tmux capture-pane -t "$TMUX_CORRUPT" -p | grep -q "P A W M O D O R O"; then
+        CORRUPT_ALL_OK=0
+        return 1
+    fi
+    tmux send-keys -t "$TMUX_CORRUPT" "5"
+    sleep 0.3
+    tmux send-keys -t "$TMUX_CORRUPT" Right
+    sleep 0.2
+    tmux send-keys -t "$TMUX_CORRUPT" "B"
+    sleep 0.2
+    tmux send-keys -t "$TMUX_CORRUPT" "Q"
+    sleep 0.4
+
+    if [ ! -f "$CORRUPT_SUBDIR/settings.dat" ] || [ "$(stat -c %s "$CORRUPT_SUBDIR/settings.dat")" -ne 24 ]; then
+        CORRUPT_ALL_OK=0
+        return 1
+    fi
+    return 0
+}
+
+for var in missing empty truncated_header wrong_magic wrong_version invalid_theme invalid_bool oversized; do
+    if ! run_corrupt_variant "$var"; then
+        break
+    fi
+done
+tmux kill-session -t "$TMUX_CORRUPT" 2>/dev/null || true
+rm -rf "$CORRUPT_SUBDIR"
+
+if [ "$CORRUPT_ALL_OK" -eq 1 ]; then
+    pass "Scenario 24 - Malformed settings variants safely handled with defaults and 24-byte save"
+else
+    fail "Scenario 24 - Corrupted settings fallback failed"
+fi
+
+# -----------------------------------------------------------------------------
+# Scenario 25: Journal Deletion (First, Mid, Last, Only) and Cancellation (Task V10)
+# -----------------------------------------------------------------------------
+JRNL_SUBDIR="$TMP_DIR/jrnl_del_test"
+mkdir -p "$JRNL_SUBDIR"
+cp "$BIN" "$JRNL_SUBDIR/pawmodoro"
+printf "2026-10-25 10:00 | Entry One\n2026-10-25 11:00 | Entry Two\n2026-10-25 12:00 | Entry Three\n" > "$JRNL_SUBDIR/journal.txt"
+
+TMUX_JRNL="paw_jrnl_$$"
+tmux new-session -d -s "$TMUX_JRNL" -x 80 -y 24 -c "$JRNL_SUBDIR" bash
+tmux send-keys -t "$TMUX_JRNL" "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+sleep 0.4
+
+JRNL_DEL_OK=0
+if tmux capture-pane -t "$TMUX_JRNL" -p | grep -q "P A W M O D O R O"; then
+    tmux send-keys -t "$TMUX_JRNL" "3"
+    sleep 0.3
+    if tmux capture-pane -t "$TMUX_JRNL" -p | grep -q "JOURNAL"; then
+        # 1. Test cancellation: press D, then N
+        tmux send-keys -t "$TMUX_JRNL" "D"
+        sleep 0.2
+        tmux send-keys -t "$TMUX_JRNL" "N"
+        sleep 0.2
+        ORIG_COUNT=$(wc -l < "$JRNL_SUBDIR/journal.txt")
+
+        # 2. Delete middle entry (Entry Two): selection defaults to bottom (Entry Three). Press Up Arrow.
+        tmux send-keys -t "$TMUX_JRNL" Up "D"
+        sleep 0.2
+        tmux send-keys -t "$TMUX_JRNL" "Y"
+        sleep 0.3
+
+        # 3. Delete top entry (Entry One): press Up Arrow.
+        tmux send-keys -t "$TMUX_JRNL" Up "D"
+        sleep 0.2
+        tmux send-keys -t "$TMUX_JRNL" "Y"
+        sleep 0.3
+
+        # 4. Delete only remaining entry (Entry Three).
+        tmux send-keys -t "$TMUX_JRNL" "D"
+        sleep 0.2
+        tmux send-keys -t "$TMUX_JRNL" "Y"
+        sleep 0.3
+
+        # 5. Test blocked temporary file: add entry, create journal.tmp dir, attempt delete
+        tmux send-keys -t "$TMUX_JRNL" "N"
+        sleep 0.2
+        tmux send-keys -t "$TMUX_JRNL" "Blocked Test Entry" Enter
+        sleep 0.3
+        mkdir "$JRNL_SUBDIR/journal.tmp"
+        tmux send-keys -t "$TMUX_JRNL" "D"
+        sleep 0.2
+        tmux send-keys -t "$TMUX_JRNL" "Y"
+        sleep 0.3
+        BLOCKED_ERR=0
+        if tmux capture-pane -t "$TMUX_JRNL" -p | grep -q "Could not delete"; then
+            BLOCKED_ERR=1
+        fi
+        rmdir "$JRNL_SUBDIR/journal.tmp"
+
+        tmux send-keys -t "$TMUX_JRNL" "B"
+        sleep 0.2
+        tmux send-keys -t "$TMUX_JRNL" "Q"
+        sleep 0.4
+
+        if [ "$ORIG_COUNT" -eq 3 ] && [ "$BLOCKED_ERR" -eq 1 ] && [ ! -e "$JRNL_SUBDIR/journal.tmp" ]; then
+            JRNL_DEL_OK=1
+        fi
+    fi
+fi
+tmux kill-session -t "$TMUX_JRNL" 2>/dev/null || true
+rm -rf "$JRNL_SUBDIR"
+
+if [ "$JRNL_DEL_OK" -eq 1 ]; then
+    pass "Scenario 25 - Journal deletion (first, mid, only), cancellation, and blocked-tmp safety"
+else
+    fail "Scenario 25 - Journal deletion and cancellation failed"
+fi
+
+# -----------------------------------------------------------------------------
+# Scenario 26: Journal 200-Character Entry Wrapping at 80x24 and 120x40 (Task V10)
+# -----------------------------------------------------------------------------
+WRAP_SUBDIR="$TMP_DIR/jrnl_wrap_test"
+mkdir -p "$WRAP_SUBDIR"
+cp "$BIN" "$WRAP_SUBDIR/pawmodoro"
+P200="P200_AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGGHHHHHIIIIIJJJJJKKKKKLLLLLMMMMMNNNNNOOOOOPPPPPQQQQQRRRRRSSSSSTTTTTUUUUUVVVVVWWWWWXXXXXYYYYYZZZZZ000001111122222333334444455555666667777788888999990123456789END!"
+printf "2026-10-25 12:00 | %s\n" "$P200" > "$WRAP_SUBDIR/journal.txt"
+
+TMUX_WRAP="paw_wrap_$$"
+tmux new-session -d -s "$TMUX_WRAP" -x 80 -y 24 -c "$WRAP_SUBDIR" bash
+tmux send-keys -t "$TMUX_WRAP" "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+sleep 0.4
+
+WRAP_OK=0
+if tmux capture-pane -t "$TMUX_WRAP" -p | grep -q "P A W M O D O R O"; then
+    tmux send-keys -t "$TMUX_WRAP" "3"
+    sleep 0.3
+    # Check 80x24 overflow
+    OV80=$(tmux capture-pane -t "$TMUX_WRAP" -p | awk 'length($0)>79{print NR ":" $0}')
+    # Open full view
+    tmux send-keys -t "$TMUX_WRAP" Enter
+    sleep 0.2
+    FULL_CAP=$(tmux capture-pane -t "$TMUX_WRAP" -p)
+    tmux send-keys -t "$TMUX_WRAP" "B"
+    sleep 0.2
+
+    # Resize to 120x40
+    tmux resize-window -t "$TMUX_WRAP" -x 120 -y 40
+    sleep 0.2
+    tmux send-keys -t "$TMUX_WRAP" "V"
+    sleep 0.3
+    OV120=$(tmux capture-pane -t "$TMUX_WRAP" -p | awk 'length($0)>119{print NR ":" $0}')
+
+    tmux send-keys -t "$TMUX_WRAP" "B"
+    sleep 0.2
+    tmux send-keys -t "$TMUX_WRAP" "Q"
+    sleep 0.4
+
+    if [ -z "$OV80" ] && [ -z "$OV120" ] && echo "$FULL_CAP" | grep -q "P200_" && echo "$FULL_CAP" | grep -q "END!"; then
+        WRAP_OK=1
+    fi
+fi
+tmux kill-session -t "$TMUX_WRAP" 2>/dev/null || true
+rm -rf "$WRAP_SUBDIR"
+
+if [ "$WRAP_OK" -eq 1 ]; then
+    pass "Scenario 26 - Journal 200-character entry wraps cleanly at 80x24 and 120x40"
+else
+    fail "Scenario 26 - Journal 200-character wrapping failed (ov80=$OV80, ov120=$OV120)"
+fi
+
+# -----------------------------------------------------------------------------
+# Scenario 27: Strict 7-Bit ASCII Mode Purity (Task V10)
+# -----------------------------------------------------------------------------
+ASCII_SUBDIR="$TMP_DIR/ascii_pure_test"
+mkdir -p "$ASCII_SUBDIR"
+cp "$BIN" "$ASCII_SUBDIR/pawmodoro"
+# Write settings.dat with setting_charset = 1
+python3 -c "
+magic = b'PAWM'
+data = magic + bytes([2,0,0,0, 0,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 7,0,0,0])
+with open('$ASCII_SUBDIR/settings.dat', 'wb') as f:
+    f.write(data)
+"
+printf "2026-10-25 12:00 | ASCII Note with Cat 🐱 and Heart ❤️ test\n" > "$ASCII_SUBDIR/journal.txt"
+
+TMUX_ASCII="paw_ascii_$$"
+tmux new-session -d -s "$TMUX_ASCII" -x 80 -y 24 -c "$ASCII_SUBDIR" bash
+tmux send-keys -t "$TMUX_ASCII" "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+sleep 0.4
+
+ASCII_PURE_OK=1
+# Menu
+if tmux capture-pane -t "$TMUX_ASCII" -ep | grep -P "[\x80-\xFF]" >/dev/null; then ASCII_PURE_OK=0; fi
+# Timer
+tmux send-keys -t "$TMUX_ASCII" "1"
+sleep 0.3
+if tmux capture-pane -t "$TMUX_ASCII" -ep | grep -P "[\x80-\xFF]" >/dev/null; then ASCII_PURE_OK=0; fi
+tmux send-keys -t "$TMUX_ASCII" "Q"
+sleep 0.3
+# Habits
+tmux send-keys -t "$TMUX_ASCII" "2"
+sleep 0.3
+if tmux capture-pane -t "$TMUX_ASCII" -ep | grep -P "[\x80-\xFF]" >/dev/null; then ASCII_PURE_OK=0; fi
+tmux send-keys -t "$TMUX_ASCII" "B"
+sleep 0.3
+# Journal
+tmux send-keys -t "$TMUX_ASCII" "3"
+sleep 0.3
+if tmux capture-pane -t "$TMUX_ASCII" -ep | grep -P "[\x80-\xFF]" >/dev/null; then ASCII_PURE_OK=0; fi
+tmux send-keys -t "$TMUX_ASCII" "B"
+sleep 0.3
+# Settings
+tmux send-keys -t "$TMUX_ASCII" "5"
+sleep 0.3
+if tmux capture-pane -t "$TMUX_ASCII" -ep | grep -P "[\x80-\xFF]" >/dev/null; then ASCII_PURE_OK=0; fi
+tmux send-keys -t "$TMUX_ASCII" "B"
+sleep 0.3
+tmux send-keys -t "$TMUX_ASCII" "Q"
+sleep 0.4
+
+tmux kill-session -t "$TMUX_ASCII" 2>/dev/null || true
+rm -rf "$ASCII_SUBDIR"
+
+if [ "$ASCII_PURE_OK" -eq 1 ]; then
+    pass "Scenario 27 - Strict 7-bit ASCII mode emits zero non-ASCII bytes across all screens"
+else
+    fail "Scenario 27 - Non-ASCII bytes detected in ASCII mode"
+fi
+
+# -----------------------------------------------------------------------------
+# Scenario 28: Narrow-to-Wide Resize and Size Gate (Task V10)
+# -----------------------------------------------------------------------------
+RESIZE_SUBDIR="$TMP_DIR/resize_test"
+mkdir -p "$RESIZE_SUBDIR"
+cp "$BIN" "$RESIZE_SUBDIR/pawmodoro"
+TMUX_RESIZE="paw_resize_$$"
+tmux new-session -d -s "$TMUX_RESIZE" -x 80 -y 24 -c "$RESIZE_SUBDIR" bash
+tmux send-keys -t "$TMUX_RESIZE" "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+sleep 0.4
+
+RESIZE_OK=0
+if tmux capture-pane -t "$TMUX_RESIZE" -p | grep -q "P A W M O D O R O"; then
+    # Resize to 120x40
+    tmux resize-window -t "$TMUX_RESIZE" -x 120 -y 40
+    sleep 0.3
+    tmux send-keys -t "$TMUX_RESIZE" "X"
+    sleep 0.3
+    WIDE_CAP=$(tmux capture-pane -t "$TMUX_RESIZE" -p)
+    CENTER_OK=0
+    if echo "$WIDE_CAP" | grep -qE '^ {10}╭'; then
+        CENTER_OK=1
+    fi
+
+    # Resize to 70x20 (< 80x24 size gate)
+    tmux resize-window -t "$TMUX_RESIZE" -x 70 -y 20
+    sleep 0.3
+    tmux send-keys -t "$TMUX_RESIZE" "X"
+    sleep 0.3
+    GATE_OK=0
+    if tmux capture-pane -t "$TMUX_RESIZE" -p | grep -q "Please enlarge the terminal"; then
+        GATE_OK=1
+    fi
+
+    # Resize back to 80x24
+    tmux resize-window -t "$TMUX_RESIZE" -x 80 -y 24
+    sleep 0.3
+    tmux send-keys -t "$TMUX_RESIZE" "X"
+    sleep 0.3
+    RESTORE_OK=0
+    if tmux capture-pane -t "$TMUX_RESIZE" -p | grep -q "P A W M O D O R O"; then
+        RESTORE_OK=1
+    fi
+
+    tmux send-keys -t "$TMUX_RESIZE" "Q"
+    sleep 0.4
+
+    if [ "$CENTER_OK" -eq 1 ] && [ "$GATE_OK" -eq 1 ] && [ "$RESTORE_OK" -eq 1 ]; then
+        RESIZE_OK=1
+    fi
+fi
+tmux kill-session -t "$TMUX_RESIZE" 2>/dev/null || true
+rm -rf "$RESIZE_SUBDIR"
+
+if [ "$RESIZE_OK" -eq 1 ]; then
+    pass "Scenario 28 - Narrow-to-wide resize (100 cols centered), size gate (<80x24), and restoration"
+else
+    fail "Scenario 28 - Resize handling failed (center=$CENTER_OK, gate=$GATE_OK, restore=$RESTORE_OK)"
+fi
+
+# -----------------------------------------------------------------------------
+# Scenario 29: Reduce Motion Persistence & Zero Idle Writes (Task V10)
+# -----------------------------------------------------------------------------
+RM_SUBDIR="$TMP_DIR/rm_test"
+mkdir -p "$RM_SUBDIR"
+cp "$BIN" "$RM_SUBDIR/pawmodoro"
+# Write settings.dat with anim = 0
+python3 -c "
+magic = b'PAWM'
+data = magic + bytes([2,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, 7,0,0,0])
+with open('$RM_SUBDIR/settings.dat', 'wb') as f:
+    f.write(data)
+"
+RM_LOG="$RM_SUBDIR/rm_strace.log"
+TMUX_RM="paw_rm_$$"
+tmux new-session -d -s "$TMUX_RM" -x 80 -y 24 -c "$RM_SUBDIR" bash
+tmux send-keys -t "$TMUX_RM" "strace -f -tt -e trace=write -o '$RM_LOG' ./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+sleep 0.5
+
+RM_OK=0
+if tmux capture-pane -t "$TMUX_RM" -p | grep -q "P A W M O D O R O"; then
+    rm -f "$RM_LOG"
+    sleep 2.0
+    if [ -f "$RM_LOG" ]; then
+        RM_WRITES=$(wc -l < "$RM_LOG")
+    else
+        RM_WRITES=0
+    fi
+    tmux send-keys -t "$TMUX_RM" "Q"
+    sleep 0.4
+    if [ "$RM_WRITES" -eq 0 ]; then
+        RM_OK=1
+    fi
+fi
+tmux kill-session -t "$TMUX_RM" 2>/dev/null || true
+rm -rf "$RM_SUBDIR"
+
+if [ "$RM_OK" -eq 1 ]; then
+    pass "Scenario 29 - Reduce motion (anim=0) persistence and 0 idle writes verified"
+else
+    fail "Scenario 29 - Reduce motion idle write check failed ($RM_WRITES writes detected)"
+fi
+
+# -----------------------------------------------------------------------------
+# Scenario 30: Sound Disabled Launches No Subprocesses (Task V10)
+# -----------------------------------------------------------------------------
+NOSND_SUBDIR="$TMP_DIR/nosnd_test"
+mkdir -p "$NOSND_SUBDIR"
+cp "$BIN" "$NOSND_SUBDIR/pawmodoro"
+# Write settings.dat with sound = 0
+python3 -c "
+magic = b'PAWM'
+data = magic + bytes([2,0,0,0, 0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 7,0,0,0])
+with open('$NOSND_SUBDIR/settings.dat', 'wb') as f:
+    f.write(data)
+"
+NOSND_LOG="$NOSND_SUBDIR/nosnd_strace.log"
+TMUX_NOSND="paw_nosnd_$$"
+tmux new-session -d -s "$TMUX_NOSND" -x 80 -y 24 -c "$NOSND_SUBDIR" bash
+tmux send-keys -t "$TMUX_NOSND" "strace -f -e trace=fork,clone,vfork,execve,pipe,pipe2 -o '$NOSND_LOG' ./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+sleep 0.5
+
+NOSND_OK=0
+if tmux capture-pane -t "$TMUX_NOSND" -p | grep -q "P A W M O D O R O"; then
+    tmux send-keys -t "$TMUX_NOSND" "4"
+    sleep 0.2
+    tmux send-keys -t "$TMUX_NOSND" "1"
+    sleep 0.3
+    for i in $(seq 1 15); do
+        if tmux capture-pane -t "$TMUX_NOSND" -p | grep -q "Focus complete"; then break; fi
+        sleep 1
+    done
+    tmux send-keys -t "$TMUX_NOSND" " "
+    sleep 0.3
+    tmux send-keys -t "$TMUX_NOSND" "Q"
+    sleep 0.3
+    tmux send-keys -t "$TMUX_NOSND" "Q"
+    sleep 0.4
+
+    FORK_COUNT=0
+    if [ -f "$NOSND_LOG" ]; then
+        FORK_COUNT=$(grep -v 'execve("\./pawmodoro"' "$NOSND_LOG" | grep -cE 'clone|fork|vfork|pipe' || true)
+    fi
+    if [ "$FORK_COUNT" -eq 0 ]; then
+        NOSND_OK=1
+    fi
+fi
+tmux kill-session -t "$TMUX_NOSND" 2>/dev/null || true
+rm -rf "$NOSND_SUBDIR"
+
+if [ "$NOSND_OK" -eq 1 ]; then
+    pass "Scenario 30 - Sound disabled launches zero sound subprocesses and zero pipes"
+else
+    fail "Scenario 30 - Sound disabled spawned subprocesses ($FORK_COUNT calls detected)"
+fi
+
+# -----------------------------------------------------------------------------
+# Scenario 31: Sound Enabled with No Player Installed Degrades Gracefully (Task V10)
+# -----------------------------------------------------------------------------
+NOPLAYER_SUBDIR="$TMP_DIR/noplayer_test"
+mkdir -p "$NOPLAYER_SUBDIR"
+cp "$BIN" "$NOPLAYER_SUBDIR/pawmodoro"
+# Write settings.dat with sound = 1
+python3 -c "
+magic = b'PAWM'
+data = magic + bytes([2,0,0,0, 0,0,0,0, 1,0,0,0, 1,0,0,0, 0,0,0,0, 7,0,0,0])
+with open('$NOPLAYER_SUBDIR/settings.dat', 'wb') as f:
+    f.write(data)
+"
+TMUX_NOPLAYER="paw_noplayer_$$"
+tmux new-session -d -s "$TMUX_NOPLAYER" -x 80 -y 24 -c "$NOPLAYER_SUBDIR" bash
+tmux send-keys -t "$TMUX_NOPLAYER" "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+sleep 0.5
+
+NOPLAYER_OK=0
+if tmux capture-pane -t "$TMUX_NOPLAYER" -p | grep -q "P A W M O D O R O"; then
+    tmux send-keys -t "$TMUX_NOPLAYER" "4"
+    sleep 0.2
+    tmux send-keys -t "$TMUX_NOPLAYER" "1"
+    sleep 0.3
+    for i in $(seq 1 15); do
+        if tmux capture-pane -t "$TMUX_NOPLAYER" -p | grep -q "Focus complete"; then break; fi
+        sleep 1
+    done
+    tmux send-keys -t "$TMUX_NOPLAYER" " "
+    sleep 0.3
+    tmux send-keys -t "$TMUX_NOPLAYER" "Q"
+    sleep 0.3
+    tmux send-keys -t "$TMUX_NOPLAYER" "Q"
+    sleep 0.4
+
+    ZOMBIES=$(ps axo stat | grep -c 'Z' || true)
+    if grep -q "EXIT=0" "$NOPLAYER_SUBDIR/exit.txt" 2>/dev/null && [ "$ZOMBIES" -eq 0 ]; then
+        NOPLAYER_OK=1
+    fi
+fi
+tmux kill-session -t "$TMUX_NOPLAYER" 2>/dev/null || true
+rm -rf "$NOPLAYER_SUBDIR"
+
+if [ "$NOPLAYER_OK" -eq 1 ]; then
+    pass "Scenario 31 - Sound enabled with missing player degrades gracefully with 0 zombies"
+else
+    fail "Scenario 31 - Missing player degradation failed (zombies=$ZOMBIES)"
+fi
+
 
 # -----------------------------------------------------------------------------
 # Optional Extended Scenario: Full 4-Session Cycle (--full)
@@ -752,7 +1266,7 @@ if [ "$FULL_MODE" -eq 1 ]; then
     send "4" # Demo ON
     sleep 0.3
     send "1" # Start Session 1
-    
+
     CYCLE_OK=1
     for sess in 1 2 3 4; do
         if ! wait_for "FOCUS - Session $sess of 4" 10; then

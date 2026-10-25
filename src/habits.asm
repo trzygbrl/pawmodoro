@@ -980,6 +980,8 @@ habits_run:
 
 .key_d:
     call habits_delete
+    cmp dword [state], STATE_QUIT
+    je .habits_exit
     jmp .habits_loop
 
 .key_digit:
