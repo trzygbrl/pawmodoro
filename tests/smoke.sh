@@ -150,10 +150,10 @@ echo "=== 2. Running Scenarios ==="
 # -----------------------------------------------------------------------------
 # Scenario 1: Menu Title & Dashboard Layout
 # -----------------------------------------------------------------------------
-if wait_for "P A W M O D O R O" 5 && cap | grep -q "Today:" && cap | grep -q "Habits:" && cap | grep -q "\[4\] Demo mode: OFF"; then
-    pass "Scenario 1 - Menu title, dashboard, and demo mode indicator"
+if wait_for "P A W M O D O R O" 5 && cap | grep -q "Today:" && cap | grep -q "Habits:" && cap | grep -q "\[4\] Demo mode: OFF" && cap | grep -q "\[5\] Settings"; then
+    pass "Scenario 1 - Menu title, dashboard, demo mode, and settings option"
 else
-    fail "Scenario 1 - Menu title, dashboard, and demo mode indicator"
+    fail "Scenario 1 - Menu title, dashboard, demo mode, and settings option"
 fi
 
 # -----------------------------------------------------------------------------
@@ -474,13 +474,69 @@ wait_for "JOURNAL" 5
 OV_JRNL=$(cap | awk 'length($0)>79{print}')
 send "B"
 wait_for "P A W M O D O R O" 5
+send "5"
+wait_for "SETTINGS" 5
+OV_SETTINGS=$(cap | awk 'length($0)>79{print}')
+send "B"
+wait_for "P A W M O D O R O" 5
 send "Q"
 sleep 0.4
 
-if [ -z "$OV_MENU" ] && [ -z "$OV_HABITS" ] && [ -z "$OV_JRNL" ]; then
+if [ -z "$OV_MENU" ] && [ -z "$OV_HABITS" ] && [ -z "$OV_JRNL" ] && [ -z "$OV_SETTINGS" ]; then
     pass "Scenario 16 - Zero screen overflow past frame boundary across all screens"
 else
-    fail "Scenario 16 - Lines exceeded frame boundary (Menu='$OV_MENU', Habits='$OV_HABITS', Jrnl='$OV_JRNL')"
+    fail "Scenario 16 - Lines exceeded frame boundary (Menu='$OV_MENU', Habits='$OV_HABITS', Jrnl='$OV_JRNL', Settings='$OV_SETTINGS')"
+fi
+
+# -----------------------------------------------------------------------------
+# Scenario 17: Settings Screen & Custom Color Editor
+# -----------------------------------------------------------------------------
+send "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+if wait_for "P A W M O D O R O" 5; then
+    send "5"
+    if wait_for "SETTINGS" 5 && cap | grep -q "Theme" && cap | grep -q "Customize colors" && cap | grep -q "Animations" && cap | grep -q "Sound & Volume" && cap | grep -q "Reset to defaults"; then
+        send "Down"
+        sleep 0.2
+        send Enter
+        if wait_for "CUSTOMIZE COLORS" 5 && cap | grep -q "BORDER" && cap | grep -q "HIGHLIGHT"; then
+            send "B"
+            if wait_for "Animations" 5; then
+                send "Up"
+                sleep 0.2
+                send "Right"
+                sleep 0.3
+                if wait_for "Saved" 5; then
+                    send "B"
+                    if wait_for "P A W M O D O R O" 5; then
+                        send "Q"
+                        sleep 0.4
+                        if [ -f "$TMP_DIR/settings.dat" ]; then
+                            SETTINGS_SIZE=$(stat -c %s "$TMP_DIR/settings.dat")
+                            if [ "$SETTINGS_SIZE" -eq 24 ]; then
+                                pass "Scenario 17 - Settings navigation, color editor, immediate save, and 24B settings.dat"
+                            else
+                                fail "Scenario 17 - settings.dat size is $SETTINGS_SIZE bytes (expected 24)"
+                            fi
+                        else
+                            fail "Scenario 17 - settings.dat file was not created"
+                        fi
+                    else
+                        fail "Scenario 17 - Key B did not return to Main Menu"
+                    fi
+                else
+                    fail "Scenario 17 - Setting change did not display 'Saved'"
+                fi
+            else
+                fail "Scenario 17 - Key B from Color Editor did not return to SETTINGS"
+            fi
+        else
+            fail "Scenario 17 - Enter did not open CUSTOMIZE COLORS screen"
+        fi
+    else
+        fail "Scenario 17 - Key 5 did not display all SETTINGS rows"
+    fi
+else
+    fail "Scenario 17 - Application failed to start for Settings test"
 fi
 
 # -----------------------------------------------------------------------------

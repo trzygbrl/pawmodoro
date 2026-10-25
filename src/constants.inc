@@ -150,6 +150,7 @@ STATE_TIMER             equ 1           ; Pomodoro active timer
 STATE_HABITS            equ 2           ; Habit tracker view/edit
 STATE_JOURNAL           equ 3           ; Journal view/add
 STATE_QUIT              equ 4           ; Application exit state
+STATE_SETTINGS          equ 5           ; Settings screen & color editor (PRD_V2 §6)
 
 ; =============================================================================
 ; Terminal & Key Processing Constants (Task 2 Additions)
@@ -231,11 +232,12 @@ UI_MENU_ROW_ITEM1       equ 8           ; Menu option 1 (Timer) row
 UI_MENU_ROW_ITEM2       equ 9           ; Menu option 2 (Habits) row
 UI_MENU_ROW_ITEM3       equ 10          ; Menu option 3 (Journal) row
 UI_MENU_ROW_ITEM4       equ 11          ; Menu option 4 (Demo mode) row
-UI_MENU_ROW_ITEMQ       equ 12          ; Menu option Q (Quit) row
-UI_MENU_ROW_STATUS      equ 13          ; Menu status / feedback message row
-UI_MENU_ROW_HELP        equ 14          ; Menu key help prompt row
-UI_MENU_ROW_BOTTOM      equ 15          ; Bottom border row
-UI_MENU_ROW_BELOW       equ 16          ; Row below frame for erase_eos
+UI_MENU_ROW_ITEM5       equ 12          ; Menu option 5 (Settings) row
+UI_MENU_ROW_ITEMQ       equ 13          ; Menu option Q (Quit) row
+UI_MENU_ROW_STATUS      equ 14          ; Menu status / feedback message row
+UI_MENU_ROW_HELP        equ 15          ; Menu key help prompt row
+UI_MENU_ROW_BOTTOM      equ 16          ; Bottom border row
+UI_MENU_ROW_BELOW       equ 17          ; Row below frame for erase_eos
 
 ; Main Menu Column Coordinates
 UI_MENU_COL_CAT         equ 4           ; Cat ASCII art column
@@ -272,6 +274,7 @@ KEY_1                   equ 49          ; ASCII '1'
 KEY_2                   equ 50          ; ASCII '2'
 KEY_3                   equ 51          ; ASCII '3'
 KEY_4                   equ 52          ; ASCII '4'
+KEY_5                   equ 53          ; ASCII '5' (Settings key, PRD_V2 §6)
 KEY_B                   equ 66          ; ASCII 'B' (uppercase, from key_wait)
 
 ; =============================================================================
@@ -529,3 +532,25 @@ DEFAULT_CHARSET         equ 0           ; Default charset: UTF-8 (0)
 DEFAULT_NOTIFY          equ 0           ; Default notification master: disabled (0)
 DEFAULT_NOTIFY_LAYERS   equ 0x01        ; Default notification layers: bell only (bit 0)
 DEFAULT_VOLUME          equ 2           ; Default volume: 2 (medium)
+
+; =============================================================================
+; Task V5 Additions: Settings Screen & Custom Color Editor (PRD_V2 §4, §5, §6)
+; =============================================================================
+SETTINGS_ROW_COUNT      equ 7           ; 7 selectable settings rows (0..6)
+SETTINGS_ROW_THEME      equ 0           ; Theme cycle row
+SETTINGS_ROW_CUSTOMIZE  equ 1           ; Customize colors row
+SETTINGS_ROW_ANIM       equ 2           ; Animations on/off row
+SETTINGS_ROW_SOUND      equ 3           ; Sound on/off & volume row
+SETTINGS_ROW_CHARSET    equ 4           ; Charset UTF-8 / ASCII row
+SETTINGS_ROW_NOTIFY     equ 5           ; Terminal integration on/off row
+SETTINGS_ROW_RESET      equ 6           ; Reset to defaults row
+
+; Settings Sub-View Modes
+SETTINGS_MODE_MAIN      equ 0           ; Main settings list
+SETTINGS_MODE_COLORS    equ 1           ; Dedicated color editor
+SETTINGS_MODE_CONFIRM   equ 2           ; Reset confirmation modal
+
+; Color Editor 16x16 Palette Grid Constants
+COLOR_GRID_ROWS         equ 16          ; 16 rows of colors
+COLOR_GRID_COLS         equ 16          ; 16 columns of colors
+COLOR_STEP_PG           equ 16          ; Step size for PgUp / PgDn (+/- 16)

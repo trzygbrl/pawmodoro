@@ -134,6 +134,7 @@ section .data
     menu_item_4_prefix:     db "[4] Demo mode: ", CHAR_NULL
     menu_demo_off:          db "OFF", CHAR_NULL
     menu_demo_on:           db "ON", CHAR_NULL
+    menu_item_5:            db "[5] Settings", CHAR_NULL
     menu_item_q:            db "[Q] Quit", CHAR_NULL
 
     ; Stub Screen Titles & Content (PRD §5)
@@ -358,7 +359,7 @@ section .data
     ui_msg_need_suffix:         db ")", CHAR_NULL
 
     ; Main Menu Footer & Demo Status Strings (PRD §5)
-    menu_help:                  db "[1-4] Select an option   [Q] Quit", CHAR_NULL
+    menu_help:                  db "[1-5] Select an option   [Q] Quit", CHAR_NULL
     menu_msg_demo_on:           db "Demo mode ON (10 s focus)", CHAR_NULL
     menu_msg_demo_off:          db "Demo mode OFF", CHAR_NULL
 
@@ -465,3 +466,82 @@ section .data
 section .bss
 
     settings_buf:               resb 32
+
+; =============================================================================
+; Task V5 Settings Screen UI Strings and State Variables (PRD_V2 §4, §5, §6)
+; =============================================================================
+section .data
+
+    ; Titles
+    title_settings:             db "SETTINGS", CHAR_NULL
+    title_settings_colors:      db "SETTINGS - CUSTOMIZE COLORS", CHAR_NULL
+
+    ; Setting row labels (7 rows)
+    settings_lbl_theme:         db "Theme", CHAR_NULL
+    settings_lbl_customize:     db "Customize colors", CHAR_NULL
+    settings_lbl_anim:          db "Animations", CHAR_NULL
+    settings_lbl_sound:         db "Sound & Volume", CHAR_NULL
+    settings_lbl_charset:       db "Charset", CHAR_NULL
+    settings_lbl_notify:        db "Terminal integration", CHAR_NULL
+    settings_lbl_reset:         db "Reset to defaults", CHAR_NULL
+
+    ; Values and status strings
+    settings_val_on:            db "ON", CHAR_NULL
+    settings_val_off:           db "OFF", CHAR_NULL
+    settings_val_reduce_motion: db "OFF (Reduce motion)", CHAR_NULL
+    settings_val_utf8:          db "UTF-8", CHAR_NULL
+    settings_val_ascii:         db "ASCII", CHAR_NULL
+
+    settings_hint_customize:    db "[Enter] Open color editor", CHAR_NULL
+    settings_hint_reset:        db "[Enter] Reset all to defaults", CHAR_NULL
+    settings_confirm_prompt:    db "Reset all settings to defaults? (y/n)", CHAR_NULL
+
+    settings_msg_saved:         db "Saved", CHAR_NULL
+    settings_msg_could_not_save: db "Could not save", CHAR_NULL
+
+    ; Sample line elements
+    settings_sample_lbl:        db "Sample: ", CHAR_NULL
+    settings_sample_title:      db "Title ", CHAR_NULL
+    settings_sample_text:       db "Text ", CHAR_NULL
+    settings_sample_accent:     db "Accent ", CHAR_NULL
+    settings_sample_ok:         db "[OK] ", CHAR_NULL
+    settings_sample_warn:       db "[WARN] ", CHAR_NULL
+    settings_sample_err:        db "[ERR]", CHAR_NULL
+
+    ; Slot names for color editor
+    slot_name_0:                db " 0: BORDER   ", CHAR_NULL
+    slot_name_1:                db " 1: TITLE    ", CHAR_NULL
+    slot_name_2:                db " 2: ACCENT   ", CHAR_NULL
+    slot_name_3:                db " 3: TEXT     ", CHAR_NULL
+    slot_name_4:                db " 4: DIM      ", CHAR_NULL
+    slot_name_5:                db " 5: OK       ", CHAR_NULL
+    slot_name_6:                db " 6: WARN     ", CHAR_NULL
+    slot_name_7:                db " 7: ERR      ", CHAR_NULL
+    slot_name_8:                db " 8: CAT      ", CHAR_NULL
+    slot_name_9:                db " 9: BAR_FULL ", CHAR_NULL
+    slot_name_10:               db "10: BAR_EMPTY", CHAR_NULL
+    slot_name_11:               db "11: HIGHLIGHT", CHAR_NULL
+
+    slot_names:
+        dd slot_name_0, slot_name_1, slot_name_2, slot_name_3
+        dd slot_name_4, slot_name_5, slot_name_6, slot_name_7
+        dd slot_name_8, slot_name_9, slot_name_10, slot_name_11
+
+    ; Key help strings
+    settings_help_main:         db "[Up/Down] Select   [Left/Right] Change   [Enter] Edit/Toggle   [B/Esc] Back", CHAR_NULL
+    settings_help_colors:       db "[Up/Down] Slot  [Left/Right] +/-1  [PgUp/PgDn] +/-16  [B/Esc] Back", CHAR_NULL
+    settings_help_confirm:      db "[Y] Confirm reset   [N/Esc/B] Cancel", CHAR_NULL
+
+    ; Sound & Volume helpers
+    settings_lbl_sound_prefix:  db "Sound: ", CHAR_NULL
+    settings_lbl_vol_prefix:    db "   Vol: < ", CHAR_NULL
+    settings_lbl_vol_suffix:    db " > (0-3)", CHAR_NULL
+
+section .bss
+
+    ; Settings UI state tracking
+    settings_sel_row:           resd 1          ; Currently selected row on main settings screen (0..6)
+    settings_view_mode:         resd 1          ; SETTINGS_MODE_* (0 = main, 1 = color editor, 2 = confirm)
+    settings_color_slot:        resd 1          ; Currently selected slot in color editor (0..11)
+    settings_status_msg:        resd 1          ; Pointer to status message (or 0)
+    settings_status_style:      resd 1          ; STATUS_OK or STATUS_ERR

@@ -25,6 +25,7 @@ section .text
 %include "src/ui.asm"
 %include "src/file.asm"
 %include "src/settings.asm"
+%include "src/settings_ui.asm"
 %include "src/stats.asm"
 %include "src/timer.asm"
 %include "src/habits.asm"
@@ -74,12 +75,23 @@ _start:
     cmp eax, STATE_MENU
     je .render_menu
 
+    cmp eax, STATE_SETTINGS
+    je .render_settings
+
     cmp eax, STATE_QUIT
     je .handle_exit
 
     ; Unknown state fallback: return to menu
     mov dword [state], STATE_MENU
     jmp .render_menu
+
+.render_settings:
+    call settings_run
+    cmp dword [state], STATE_QUIT
+    je .handle_exit
+    mov dword [state], STATE_MENU
+    mov dword [need_redraw], 1
+    jmp .main_loop
 
 .render_menu:
     call dashboard_refresh      ; Refresh live daily stats on every return to menu (Task 9)
@@ -152,7 +164,20 @@ _start:
     cmp eax, KEY_4
     je .menu_toggle_demo
 
+    ; '5' -> Enter Settings screen
+    cmp eax, KEY_5
+    je .menu_to_settings
+
     ; Any other key is ignored: no redraw, no write!
+    jmp .main_loop
+
+.menu_to_settings:
+    mov dword [state], STATE_SETTINGS
+    call settings_run
+    cmp dword [state], STATE_QUIT
+    je .handle_exit
+    mov dword [state], STATE_MENU
+    mov dword [need_redraw], 1
     jmp .main_loop
 
 .menu_to_timer:

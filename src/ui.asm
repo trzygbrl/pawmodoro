@@ -350,6 +350,8 @@ ui_draw_menu:
     call ui_frame_row
     mov eax, UI_MENU_ROW_ITEM4
     call ui_frame_row
+    mov eax, UI_MENU_ROW_ITEM5
+    call ui_frame_row
     mov eax, UI_MENU_ROW_ITEMQ
     call ui_frame_row
 
@@ -481,7 +483,7 @@ ui_draw_menu:
     call buf_str
     mov esi, ansi_reset
     call buf_str
-    jmp .menu_item_quit
+    jmp .menu_item_5
 
 .menu_demo_active:
     mov esi, ansi_bold
@@ -492,6 +494,13 @@ ui_draw_menu:
     call buf_str
     mov esi, ansi_reset
     call buf_str
+
+.menu_item_5:
+    ; [5] Settings
+    mov eax, UI_MENU_ROW_ITEM5
+    mov ebx, UI_MENU_COL_CONTENT
+    mov esi, menu_item_5
+    call ui_text_at
 
 .menu_item_quit:
     ; [Q] Quit
