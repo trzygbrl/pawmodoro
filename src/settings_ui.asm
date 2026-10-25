@@ -379,6 +379,66 @@ settings_draw:
     mov al, '>'
     call buf_char
 
+    ; Render 5 individual notification layer indicators: 1:Bel 2:Flsh 3:Titl 4:Prog 5:Toast
+    ; Active layer bit: SLOT_OK (green). Inactive layer bit: SLOT_DIM (gray).
+    test byte [setting_notify_layers], NOTIFY_LAYER_BELL
+    jz .layer1_dim
+    mov al, SLOT_OK
+    jmp .layer1_draw
+.layer1_dim:
+    mov al, SLOT_DIM
+.layer1_draw:
+    call ui_color
+    mov esi, settings_lbl_layer_1
+    call buf_str
+
+    test byte [setting_notify_layers], NOTIFY_LAYER_FLASH
+    jz .layer2_dim
+    mov al, SLOT_OK
+    jmp .layer2_draw
+.layer2_dim:
+    mov al, SLOT_DIM
+.layer2_draw:
+    call ui_color
+    mov esi, settings_lbl_layer_2
+    call buf_str
+
+    test byte [setting_notify_layers], NOTIFY_LAYER_TITLE
+    jz .layer3_dim
+    mov al, SLOT_OK
+    jmp .layer3_draw
+.layer3_dim:
+    mov al, SLOT_DIM
+.layer3_draw:
+    call ui_color
+    mov esi, settings_lbl_layer_3
+    call buf_str
+
+    test byte [setting_notify_layers], NOTIFY_LAYER_PROGRESS
+    jz .layer4_dim
+    mov al, SLOT_OK
+    jmp .layer4_draw
+.layer4_dim:
+    mov al, SLOT_DIM
+.layer4_draw:
+    call ui_color
+    mov esi, settings_lbl_layer_4
+    call buf_str
+
+    test byte [setting_notify_layers], NOTIFY_LAYER_TOAST
+    jz .layer5_dim
+    mov al, SLOT_OK
+    jmp .layer5_draw
+.layer5_dim:
+    mov al, SLOT_DIM
+.layer5_draw:
+    call ui_color
+    mov esi, settings_lbl_layer_5
+    call buf_str
+
+    mov esi, ansi_reset
+    call buf_str
+
     ; -------------------------------------------------------------------------
     ; Row 6: Reset to defaults (Screen Row 18)
     ; -------------------------------------------------------------------------
@@ -402,11 +462,15 @@ settings_draw:
     call ui_draw_status
 
     ; -------------------------------------------------------------------------
-    ; Row 21: Key Help Footer
+    ; Row 21: Key Help Footer (Context-sensitive when on Terminal integration row)
     ; -------------------------------------------------------------------------
     mov eax, 21
     mov ebx, 4
     mov esi, settings_help_main
+    cmp dword [settings_sel_row], SETTINGS_ROW_NOTIFY
+    jne .emit_footer_help
+    mov esi, settings_help_notify
+.emit_footer_help:
     call ui_text_at
 
     pop eax
@@ -559,6 +623,20 @@ settings_handle_key:
     je .return_menu
     cmp eax, KEY_ESC
     je .return_menu
+
+    ; Individual layer toggle keys '1'..'5' when on Terminal integration row
+    cmp dword [settings_sel_row], SETTINGS_ROW_NOTIFY
+    jne .key_done
+    cmp eax, '1'
+    je .toggle_layer_1
+    cmp eax, '2'
+    je .toggle_layer_2
+    cmp eax, '3'
+    je .toggle_layer_3
+    cmp eax, '4'
+    je .toggle_layer_4
+    cmp eax, '5'
+    je .toggle_layer_5
 
     jmp .key_done
 
@@ -731,6 +809,31 @@ settings_handle_key:
 
 .toggle_notify:
     xor byte [setting_notify], 1
+    call settings_mutate_and_save
+    jmp .key_done
+
+.toggle_layer_1:
+    xor byte [setting_notify_layers], NOTIFY_LAYER_BELL
+    call settings_mutate_and_save
+    jmp .key_done
+
+.toggle_layer_2:
+    xor byte [setting_notify_layers], NOTIFY_LAYER_FLASH
+    call settings_mutate_and_save
+    jmp .key_done
+
+.toggle_layer_3:
+    xor byte [setting_notify_layers], NOTIFY_LAYER_TITLE
+    call settings_mutate_and_save
+    jmp .key_done
+
+.toggle_layer_4:
+    xor byte [setting_notify_layers], NOTIFY_LAYER_PROGRESS
+    call settings_mutate_and_save
+    jmp .key_done
+
+.toggle_layer_5:
+    xor byte [setting_notify_layers], NOTIFY_LAYER_TOAST
     call settings_mutate_and_save
     jmp .key_done
 

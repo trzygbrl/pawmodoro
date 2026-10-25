@@ -521,3 +521,77 @@ sfx_play:
     xor eax, eax                ; 0 = silent/no-op ok
     restore_regs
     ret
+
+;=============================================================================
+; Procedure: proc_spawn
+; Purpose:   General process spawning helper (Task V9 / PRD_V2 §10).
+;            Launches an arbitrary executable with an argument vector
+;            asynchronously in a child process.
+;            Child process redirects stdin to /dev/null (O_RDONLY), redirects
+;            stdout and stderr to /dev/null (O_WRONLY), and calls sys_execve.
+;            If execve or redirection fails, child calls sys_exit(127) immediately
+;            without invoking terminal cleanup or parent application logic.
+;            Parent process does not block and returns 0 on success or -1 on failure.
+; IN:        ESI = Pointer to NUL-terminated executable path
+;            EDI = Pointer to NULL-terminated argv array
+; OUT:       EAX = Status (0 = success, -1 = fork/spawn failure)
+; CLOBBERS:  EAX (preserves EBX, ECX, EDX, ESI, EDI)
+;=============================================================================
+proc_spawn:
+    save_regs
+
+    ; Fork child process (sys_fork, syscall 2)
+    syscall SYS_FORK
+    test eax, eax
+    js .spawn_fork_fail
+    jz .spawn_child
+
+    ; Parent process: return 0 (asynchronous process created successfully)
+    xor eax, eax
+    restore_regs
+    ret
+
+.spawn_fork_fail:
+    mov eax, -1                 ; Fork failure
+    restore_regs
+    ret
+
+.spawn_child:
+    ; 1. Redirect stdin from /dev/null (O_RDONLY = 0)
+    syscall SYS_OPEN, dev_null_path, O_RDONLY
+    test eax, eax
+    js .spawn_child_fail
+    mov ebx, eax                ; EBX = null_in_fd
+    syscall SYS_DUP2, ebx, FD_STDIN
+    cmp ebx, FD_STDIN
+    je .spawn_open_out
+    syscall SYS_CLOSE, ebx
+
+.spawn_open_out:
+    ; 2. Open /dev/null for write access for stdout and stderr (O_WRONLY = 1)
+    syscall SYS_OPEN, dev_null_path, O_WRONLY
+    test eax, eax
+    js .spawn_child_fail
+    mov ebx, eax                ; EBX = null_out_fd
+
+    ; Duplicate to stdout (1) and stderr (2)
+    syscall SYS_DUP2, ebx, FD_STDOUT
+    syscall SYS_DUP2, ebx, 2
+    cmp ebx, 2
+    jbe .spawn_exec
+    syscall SYS_CLOSE, ebx
+
+.spawn_exec:
+    ; Pass inherited process environment pointer (or empty envp fallback)
+    mov edx, [sfx_envp]
+    test edx, edx
+    jnz .spawn_do_exec
+    mov edx, sfx_default_envp
+
+.spawn_do_exec:
+    syscall SYS_EXECVE, esi, edi, edx
+
+.spawn_child_fail:
+    ; On ANY child-side failure or execve return: exit directly with code 127
+    ; CRITICAL: Never call term_restore or application cleanup from child!
+    syscall SYS_EXIT, 127

@@ -356,6 +356,13 @@ timer_draw:
     call buf_str
 
 .help_done:
+    ; Append terminal integration sequences (Layer 3 title & Layer 4 taskbar progress)
+    ; to out_buf so they are flushed as part of the normal frame in a single sys_write!
+    mov eax, [esp]              ; Frame mode (0..4)
+    call notify_title_update
+    mov eax, [esp]
+    call notify_progress_update
+
     pop eax                     ; Restore frame mode
     restore_regs
     ret
@@ -577,12 +584,14 @@ timer_run:
 .key_ctrl_c:
     ; Global quit: set STATE_QUIT and return to main shell
     call anim_reset_effects
+    call notify_clear_external
     mov dword [state], STATE_QUIT
     jmp .timer_exit
 
 .key_q:
     ; Stop timer: set STATE_MENU and return to main shell
     call anim_reset_effects
+    call notify_clear_external
     mov dword [state], STATE_MENU
     jmp .timer_exit
 
@@ -661,10 +670,15 @@ timer_run:
     mov eax, SFX_FOCUS_FANFARE
     call sfx_play
 
+    ; Dispatch configured completion notification layers (Task V9: Bell, Flash, Toast)
+    call notify_phase_complete
+    mov dword [completion_reminder_ticks], 0
+
 .focus_wait_decision:
     ; Wait for user decision while continuing animation tick
     call time_sleep_100ms
     call anim_tick
+    call notify_reminder_tick   ; Check 60s reminder interval
     call key_poll
     cmp eax, KEY_NONE
     je .focus_wait_decision
@@ -744,10 +758,15 @@ timer_run:
     mov eax, SFX_BREAK_CHIME
     call sfx_play
 
+    ; Dispatch configured completion notification layers (Task V9: Bell, Flash, Toast)
+    call notify_phase_complete
+    mov dword [completion_reminder_ticks], 0
+
 .break_wait_decision:
     ; Wait for user input while ticking animation
     call time_sleep_100ms
     call anim_tick
+    call notify_reminder_tick   ; Check 60s reminder interval
     call key_poll
     cmp eax, KEY_NONE
     je .break_wait_decision
@@ -765,6 +784,350 @@ timer_run:
 
 .timer_exit:
     call anim_reset_effects
+    call notify_clear_external
     pop eax
+    restore_regs
+    ret
+
+; =============================================================================
+; Task V9 Notification & Terminal Integration Procedures (PRD_V2 §10, §14)
+; =============================================================================
+
+;=============================================================================
+; Procedure: notify_phase_complete
+; Purpose:   Dispatches configured notification layers on natural phase completion:
+;            - Layer 1 (Bell): 0x07 emitted if NOTIFY_LAYER_BELL bit set in
+;              setting_notify_layers (independent of master flag).
+;            - Layers 2..5 (Flash, Toast): gated by master flag setting_notify:
+;              - Layer 2 (Flash): ESC[?5h -> 150ms sleep -> ESC[?5l (permitted standalone write).
+;              - Layer 5 (Desktop toast): notify-send or WSL PowerShell via proc_spawn.
+;            Does not crash, terminate application, or alter timer semantics.
+; IN:        None
+; OUT:       None
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+notify_phase_complete:
+    save_regs
+
+    ; Layer 1: Terminal Bell (gated independently by NOTIFY_LAYER_BELL bit)
+    test byte [setting_notify_layers], NOTIFY_LAYER_BELL
+    jz .check_master_notify
+    syscall SYS_WRITE, FD_STDOUT, sfx_bell_char, 1
+
+.check_master_notify:
+    ; Master notification flag (setting_notify) gates layers 2..5
+    cmp byte [setting_notify], 1
+    jne .complete_done
+
+    ; Layer 2: Screen Flash
+    test byte [setting_notify_layers], NOTIFY_LAYER_FLASH
+    jz .check_toast
+    call notify_screen_flash
+
+.check_toast:
+    ; Layer 5: Desktop Toast
+    test byte [setting_notify_layers], NOTIFY_LAYER_TOAST
+    jz .complete_done
+    call notify_desktop_toast
+
+.complete_done:
+    restore_regs
+    ret
+
+;=============================================================================
+; Procedure: notify_screen_flash
+; Purpose:   Activates terminal screen flash for ~150 ms using sys_nanosleep,
+;            then deactivates it. This is the ONE explicitly permitted standalone
+;            terminal write outside the normal frame buffer flush.
+;            Guarantees deactivation sequence is written.
+; IN:        None
+; OUT:       None
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+notify_screen_flash:
+    save_regs
+
+    ; Write activation sequence ESC[?5h (length 5)
+    syscall SYS_WRITE, FD_STDOUT, ansi_flash_on, 5
+
+    ; Sleep ~150 ms via sys_nanosleep (0 sec, 150,000,000 nsec)
+    mov dword [flash_timespec], 0
+    mov dword [flash_timespec + 4], FLASH_DELAY_NS
+    syscall SYS_NANOSLEEP, flash_timespec, 0
+
+    ; Write deactivation sequence ESC[?5l (length 5)
+    syscall SYS_WRITE, FD_STDOUT, ansi_flash_off, 5
+
+    restore_regs
+    ret
+
+;=============================================================================
+; Procedure: notify_title_update
+; Purpose:   Appends the current window-title escape sequence to out_buf:
+;            - If disabled (setting_notify == 0 or title layer bit cleared): no-op.
+;            - On completion (modes 1..4): ESC]0;Pawmodoro - Time's up! BEL
+;            - During timer phase (mode 0): ESC]0;Pawmodoro - <PHASE> MM:SS BEL
+;            Integrated into normal frame rendering; no standalone sys_write.
+; IN:        EAX = Frame mode (0 = running, 1..4 = completion / note)
+; OUT:       Appends title sequence to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+notify_title_update:
+    save_regs
+    push eax                    ; [esp] = frame mode
+
+    ; Gating: Master notify flag must be enabled AND title layer bit (0x04) set
+    cmp byte [setting_notify], 1
+    jne .title_done
+    test byte [setting_notify_layers], NOTIFY_LAYER_TITLE
+    jz .title_done
+
+    mov edx, [esp]              ; EDX = frame mode
+    test edx, edx
+    jz .title_running
+
+    ; Completion title: ESC]0;Pawmodoro - Time's up! BEL
+    mov esi, ansi_title_done
+    call buf_str
+    jmp .title_done
+
+.title_running:
+    ; Active countdown title: ESC]0;Pawmodoro - <PHASE> MM:SS BEL
+    mov esi, ansi_title_prefix
+    call buf_str
+
+    ; Append uppercase phase name
+    mov edx, [phase]
+    cmp edx, PHASE_SHORT_BREAK
+    je .title_phase_sb
+    cmp edx, PHASE_LONG_BREAK
+    je .title_phase_lb
+    mov esi, title_phase_focus
+    call buf_str
+    jmp .title_time
+
+.title_phase_sb:
+    mov esi, title_phase_short
+    call buf_str
+    jmp .title_time
+
+.title_phase_lb:
+    mov esi, title_phase_long
+    call buf_str
+
+.title_time:
+    ; Format remaining_secs as MM:SS (guaranteed non-negative)
+    mov eax, [remaining_secs]
+    test eax, eax
+    jns .title_sec_valid
+    xor eax, eax
+
+.title_sec_valid:
+    xor edx, edx
+    mov ecx, 60
+    div ecx                     ; EAX = minutes, EDX = seconds
+    push edx                    ; Save seconds
+
+    ; Format minutes (2 digits)
+    xor edx, edx
+    mov ecx, 10
+    div ecx                     ; EAX = tens, EDX = ones
+    add al, '0'
+    call buf_char
+    add dl, '0'
+    mov al, dl
+    call buf_char
+
+    ; Colon separator
+    mov al, ':'
+    call buf_char
+
+    ; Format seconds (2 digits)
+    pop eax                     ; EAX = seconds
+    xor edx, edx
+    mov ecx, 10
+    div ecx                     ; EAX = tens, EDX = ones
+    add al, '0'
+    call buf_char
+    add dl, '0'
+    mov al, dl
+    call buf_char
+
+    ; Terminating BEL (0x07)
+    mov al, CHAR_BELL
+    call buf_char
+
+.title_done:
+    pop eax
+    restore_regs
+    ret
+
+;=============================================================================
+; Procedure: notify_progress_update
+; Purpose:   Appends Windows Terminal OSC 9;4 taskbar progress sequence to out_buf:
+;            - If disabled: no-op.
+;            - If completion mode (1..4) or paused (paused == 1): ESC]9;4;0;0 BEL (clear)
+;            - If running: ESC]9;4;1;<percent> BEL (0..100)
+;            Integrated into normal frame rendering; no standalone sys_write.
+; IN:        EAX = Frame mode (0 = running, 1..4 = completion / note)
+; OUT:       Appends taskbar progress sequence to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+notify_progress_update:
+    save_regs
+    push eax
+
+    ; Gating: Master notify flag must be enabled AND progress layer bit (0x08) set
+    cmp byte [setting_notify], 1
+    jne .progress_done
+    test byte [setting_notify_layers], NOTIFY_LAYER_PROGRESS
+    jz .progress_done
+
+    mov edx, [esp]              ; EDX = frame mode
+    test edx, edx
+    jnz .progress_clear         ; Completion screen: clear progress
+
+    cmp dword [paused], 1
+    je .progress_clear          ; Paused: clear taskbar progress per requirements
+
+    ; Calculate active percentage: (elapsed * 100) / total_secs
+    mov ecx, [total_secs]
+    test ecx, ecx
+    jz .progress_clear          ; Avoid division by zero!
+
+    mov eax, [remaining_secs]
+    cmp eax, ecx
+    ja .progress_zero_pct       ; remaining > total (sanity check)
+
+    mov edx, ecx
+    sub edx, eax                ; EDX = elapsed seconds
+    imul edx, 100               ; EDX = elapsed * 100
+    mov eax, edx
+    xor edx, edx
+    div ecx                     ; EAX = percentage (0..100)
+
+    cmp eax, 100
+    jbe .progress_emit
+    mov eax, 100
+    jmp .progress_emit
+
+.progress_zero_pct:
+    xor eax, eax
+
+.progress_emit:
+    push eax                    ; Save percent
+    mov esi, ansi_taskbar_prefix_running
+    call buf_str
+    pop eax
+    call buf_u32
+    mov al, CHAR_BELL
+    call buf_char
+    jmp .progress_done
+
+.progress_clear:
+    mov esi, ansi_taskbar_clear
+    call buf_str
+
+.progress_done:
+    pop eax
+    restore_regs
+    ret
+
+;=============================================================================
+; Procedure: notify_clear_external
+; Purpose:   Resets external notification state:
+;            - Clears Windows Terminal taskbar progress (ESC]9;4;0;0 BEL).
+;            - Restores window title to "Pawmodoro" (ESC]0;Pawmodoro BEL).
+;            Flushes immediately to ensure clean external state on menu return or exit.
+;            Idempotent and safe to call multiple times.
+; IN:        None
+; OUT:       None
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+notify_clear_external:
+    save_regs
+
+    ; Discard any pending frame buffer and append clear sequences
+    mov dword [out_len], 0
+    mov esi, ansi_taskbar_clear
+    call buf_str
+    mov esi, ansi_title_restore
+    call buf_str
+    call buf_flush
+
+    restore_regs
+    ret
+
+;=============================================================================
+; Procedure: notify_desktop_toast
+; Purpose:   Sends an asynchronous desktop notification on phase completion:
+;            1. Probes for /usr/bin/notify-send using sys_access (X_OK).
+;               If available, spawns notify-send with title and phase-specific body.
+;            2. If unavailable, probes for WSL PowerShell fallback
+;               /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe.
+;               If available, spawns PowerShell balloon tip notification.
+;            3. If neither available or spawn fails, fails silently without error.
+; IN:        None (uses current [phase] to select message body)
+; OUT:       None
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+notify_desktop_toast:
+    save_regs
+
+    ; Probe Linux /usr/bin/notify-send via sys_access (syscall 33, X_OK = 1)
+    syscall SYS_ACCESS, notif_send_path, X_OK
+    test eax, eax
+    jnz .try_wsl_toast
+
+    ; Linux notify-send is available: choose focus or break message
+    mov esi, notif_send_path
+    mov edi, notif_argv_focus
+    cmp dword [phase], PHASE_FOCUS
+    je .toast_spawn
+    mov edi, notif_argv_break
+    jmp .toast_spawn
+
+.try_wsl_toast:
+    ; Probe experimental WSL PowerShell executable
+    syscall SYS_ACCESS, powershell_path, X_OK
+    test eax, eax
+    jnz .toast_done             ; No desktop notification mechanism available
+
+    mov esi, powershell_path
+    mov edi, powershell_argv_focus
+    cmp dword [phase], PHASE_FOCUS
+    je .toast_spawn
+    mov edi, powershell_argv_break
+
+.toast_spawn:
+    ; Asynchronously spawn notification process via generalized proc_spawn
+    call proc_spawn
+
+.toast_done:
+    restore_regs
+    ret
+
+;=============================================================================
+; Procedure: notify_reminder_tick
+; Purpose:   Counts 100ms ticks during completion-wait screens.
+;            Every 60 seconds (NOTIFY_REMINDER_TICKS = 600 ticks), re-dispatches
+;            enabled completion notifications (bell, flash, desktop toast)
+;            without restarting the timer or dropping user keystrokes.
+; IN:        None
+; OUT:       None
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+notify_reminder_tick:
+    save_regs
+
+    inc dword [completion_reminder_ticks]
+    cmp dword [completion_reminder_ticks], NOTIFY_REMINDER_TICKS
+    jb .reminder_done
+
+    ; 60 seconds elapsed: reset counter and re-dispatch alerts
+    mov dword [completion_reminder_ticks], 0
+    call notify_phase_complete
+
+.reminder_done:
     restore_regs
     ret

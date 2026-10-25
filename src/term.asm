@@ -81,7 +81,13 @@ term_restore:
     ; Discard any incomplete buffered drawing frame
     mov dword [out_len], 0
 
-    ; Reset styles, show cursor, and return to primary screen buffer (in that order)
+    ; Reset flash, taskbar progress, window title, attributes, cursor, and alternate screen
+    mov esi, ansi_flash_off
+    call buf_str
+    mov esi, ansi_taskbar_clear
+    call buf_str
+    mov esi, ansi_title_restore
+    call buf_str
     mov esi, ansi_reset
     call buf_str
     mov esi, ansi_show_cursor

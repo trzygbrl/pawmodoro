@@ -540,6 +540,7 @@ section .data
 
     ; Key help strings
     settings_help_main:         db "[Up/Down] Select   [Left/Right] Change   [Enter] Edit/Toggle   [B/Esc] Back", CHAR_NULL
+    settings_help_notify:       db "[Enter/Space] Master ON/OFF   [1-5] Toggle Layer   [B/Esc] Back", CHAR_NULL
     settings_help_colors:       db "[Up/Down] Slot  [Left/Right] +/-1  [PgUp/PgDn] +/-16  [B/Esc] Back", CHAR_NULL
     settings_help_confirm:      db "[Y] Confirm reset   [N/Esc/B] Cancel", CHAR_NULL
 
@@ -833,3 +834,80 @@ section .bss
     sfx_pipe_fds:               resd 2          ; Pipe fds: [0]=read, [1]=write
     sfx_buf_len:                resd 1          ; Valid PCM bytes currently in sfx_buf
     sfx_buf:                    resb SFX_BUF_SIZE ; 32 KB unsigned 8-bit mono PCM buffer
+
+; =============================================================================
+; Task V9 Additions: Notifications & Terminal Integration (PRD_V2 §10, §12)
+; =============================================================================
+section .data
+
+    ; Layer 2: Screen flash sequences
+    ansi_flash_on:              db CHAR_ESC, "[?5h", CHAR_NULL
+    ansi_flash_off:             db CHAR_ESC, "[?5l", CHAR_NULL
+
+    ; Layer 3: Continuously updated window title sequences
+    ansi_title_prefix:          db CHAR_ESC, "]0;Pawmodoro - ", CHAR_NULL
+    ansi_title_done:            db CHAR_ESC, "]0;Pawmodoro - Time's up!", CHAR_BELL, CHAR_NULL
+    ansi_title_restore:         db CHAR_ESC, "]0;Pawmodoro", CHAR_BELL, CHAR_NULL
+    title_phase_focus:          db "FOCUS ", CHAR_NULL
+    title_phase_short:          db "SHORT BREAK ", CHAR_NULL
+    title_phase_long:           db "LONG BREAK ", CHAR_NULL
+
+    ; Layer 4: Windows Terminal taskbar progress sequences (OSC 9;4)
+    ansi_taskbar_clear:         db CHAR_ESC, "]9;4;0;0", CHAR_BELL, CHAR_NULL
+    ansi_taskbar_prefix_running: db CHAR_ESC, "]9;4;1;", CHAR_NULL
+
+    ; Layer 5: Desktop notifications (Linux notify-send & experimental WSL PowerShell)
+    notif_send_path:            db "/usr/bin/notify-send", CHAR_NULL
+    notif_title:                db "Pawmodoro", CHAR_NULL
+    notif_msg_focus:            db "Focus complete! Time for a break.", CHAR_NULL
+    notif_msg_break:            db "Break complete! Ready to focus?", CHAR_NULL
+    notif_send_arg0:            db "notify-send", CHAR_NULL
+
+    notif_argv_focus:
+        dd notif_send_arg0
+        dd notif_title
+        dd notif_msg_focus
+        dd 0
+
+    notif_argv_break:
+        dd notif_send_arg0
+        dd notif_title
+        dd notif_msg_break
+        dd 0
+
+    powershell_path:            db "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe", CHAR_NULL
+    powershell_arg0:            db "powershell.exe", CHAR_NULL
+    powershell_arg1:            db "-NoProfile", CHAR_NULL
+    powershell_arg2:            db "-NonInteractive", CHAR_NULL
+    powershell_arg3:            db "-Command", CHAR_NULL
+    powershell_cmd_focus:       db "[void][System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms');$n=New-Object System.Windows.Forms.NotifyIcon;$n.Icon=[System.Drawing.SystemIcons]::Information;$n.Visible=$true;$n.ShowBalloonTip(3000,'Pawmodoro','Focus complete! Time for a break.',[System.Windows.Forms.ToolTipIcon]::Info);Start-Sleep -m 200", CHAR_NULL
+    powershell_cmd_break:       db "[void][System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms');$n=New-Object System.Windows.Forms.NotifyIcon;$n.Icon=[System.Drawing.SystemIcons]::Information;$n.Visible=$true;$n.ShowBalloonTip(3000,'Pawmodoro','Break complete! Ready to focus?',[System.Windows.Forms.ToolTipIcon]::Info);Start-Sleep -m 200", CHAR_NULL
+
+    powershell_argv_focus:
+        dd powershell_arg0
+        dd powershell_arg1
+        dd powershell_arg2
+        dd powershell_arg3
+        dd powershell_cmd_focus
+        dd 0
+
+    powershell_argv_break:
+        dd powershell_arg0
+        dd powershell_arg1
+        dd powershell_arg2
+        dd powershell_arg3
+        dd powershell_cmd_break
+        dd 0
+
+    ; Settings UI Layer Indicators for Row 5
+    settings_lbl_layer_1:       db " 1:Bel", CHAR_NULL
+    settings_lbl_layer_2:       db " 2:Flsh", CHAR_NULL
+    settings_lbl_layer_3:       db " 3:Titl", CHAR_NULL
+    settings_lbl_layer_4:       db " 4:Prog", CHAR_NULL
+    settings_lbl_layer_5:       db " 5:Toast", CHAR_NULL
+
+section .bss
+
+    ; Task V9: State variables
+    completion_reminder_ticks:  resd 1          ; Counter for 60s reminder ticks (0..600)
+    flash_timespec:             resb TIMESPEC_SIZE ; Dedicated 150ms nanosleep timespec

@@ -670,3 +670,19 @@ SFX_COUNT               equ 8           ; Total distinct sound effects
 PLAYER_NONE             equ 0           ; No working player detected (use bell fallback)
 PLAYER_PAPLAY           equ 1           ; PulseAudio paplay (/usr/bin/paplay)
 PLAYER_APLAY            equ 2           ; ALSA aplay (/usr/bin/aplay)
+
+; =============================================================================
+; Task V9 Additions: Notifications & Terminal Integration (PRD_V2 §10, §11, §12)
+; =============================================================================
+NOTIFY_LAYER_BELL       equ 0x01        ; Layer 1: Terminal bell (0x07)
+NOTIFY_LAYER_FLASH      equ 0x02        ; Layer 2: Screen flash (ESC[?5h / ESC[?5l)
+NOTIFY_LAYER_TITLE      equ 0x04        ; Layer 3: Window title (ESC]0;...)
+NOTIFY_LAYER_PROGRESS   equ 0x08        ; Layer 4: Taskbar progress (ESC]9;4;...)
+NOTIFY_LAYER_TOAST      equ 0x10        ; Layer 5: Desktop toast (notify-send / powershell)
+
+FLASH_DELAY_NS          equ 150000000   ; Screen flash duration: 150 ms (150,000,000 ns)
+NOTIFY_REMINDER_TICKS   equ 600         ; 60 seconds at 100ms ticks = 600 ticks
+
+TASKBAR_STATE_CLEAR     equ 0           ; OSC 9;4 state 0: clear / no progress
+TASKBAR_STATE_RUNNING   equ 1           ; OSC 9;4 state 1: normal progress
+TASKBAR_STATE_PAUSED    equ 4           ; OSC 9;4 state 4: paused
