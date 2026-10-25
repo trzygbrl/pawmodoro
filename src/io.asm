@@ -431,3 +431,223 @@ str_copy:
     pop ecx
     pop ebx
     ret
+
+;=============================================================================
+; Procedure: utf8_char_len
+; Purpose:   Inspects the UTF-8 sequence at ESI. Determines its byte length
+;            and validates whether it is a well-formed printable UTF-8 glyph or
+;            printable ASCII character. Control bytes (< 0x20, 0x7F, ESC),
+;            invalid UTF-8 lead bytes, and incomplete/truncated continuation
+;            sequences are flagged as invalid (CF = 1).
+;            Note: Counting non-continuation bytes is a practical approximation
+;            for the approved single-column glyph set, not a full Unicode width table.
+; IN:        ESI = Pointer to character in memory
+; OUT:       EAX = Byte length (0 if NUL, 1..4 if character/byte),
+;            CF  = 0 if valid printable character, 1 if invalid/control/NUL
+; CLOBBERS:  EAX
+;=============================================================================
+utf8_char_len:
+    push ecx
+
+    movzx eax, byte [esi]
+    test al, al
+    jz .utf8_nul                ; NUL terminator: length 0, CF=1
+
+    ; Check ASCII (< 0x80)
+    cmp al, 0x80
+    jae .utf8_multibyte
+
+    ; ASCII: length is 1 byte
+    cmp al, CHAR_SPACE
+    jb .utf8_invalid_byte       ; Control byte < 0x20
+    cmp al, 127
+    je .utf8_invalid_byte       ; DEL (0x7F)
+    mov eax, 1
+    clc                         ; CF = 0 (valid)
+    pop ecx
+    ret
+
+.utf8_invalid_byte:
+    mov eax, 1
+    stc                         ; CF = 1 (invalid)
+    pop ecx
+    ret
+
+.utf8_multibyte:
+    ; Check 2-byte sequence: lead 0xC2..0xDF
+    cmp al, 0xC2
+    jb .utf8_invalid_byte       ; 0x80..0xC1 are invalid lead bytes
+    cmp al, 0xDF
+    jbe .utf8_check_2byte
+
+    ; Check 3-byte sequence: lead 0xE0..0xEF
+    cmp al, 0xEF
+    jbe .utf8_check_3byte
+
+    ; Check 4-byte sequence: lead 0xF0..0xF4
+    cmp al, 0xF4
+    jbe .utf8_check_4byte
+
+    jmp .utf8_invalid_byte
+
+.utf8_check_2byte:
+    ; Expect 1 continuation byte at [esi + 1]
+    mov cl, [esi + 1]
+    and cl, 0xC0
+    cmp cl, 0x80
+    jne .utf8_invalid_byte      ; Missing / invalid continuation byte
+    mov eax, 2
+    clc
+    pop ecx
+    ret
+
+.utf8_check_3byte:
+    ; Expect 2 continuation bytes at [esi + 1], [esi + 2]
+    mov cl, [esi + 1]
+    and cl, 0xC0
+    cmp cl, 0x80
+    jne .utf8_invalid_byte
+    mov cl, [esi + 2]
+    and cl, 0xC0
+    cmp cl, 0x80
+    jne .utf8_invalid_byte
+    mov eax, 3
+    clc
+    pop ecx
+    ret
+
+.utf8_check_4byte:
+    ; Expect 3 continuation bytes at [esi + 1], [esi + 2], [esi + 3]
+    mov cl, [esi + 1]
+    and cl, 0xC0
+    cmp cl, 0x80
+    jne .utf8_invalid_byte
+    mov cl, [esi + 2]
+    and cl, 0xC0
+    cmp cl, 0x80
+    jne .utf8_invalid_byte
+    mov cl, [esi + 3]
+    and cl, 0xC0
+    cmp cl, 0x80
+    jne .utf8_invalid_byte
+    mov eax, 4
+    clc
+    pop ecx
+    ret
+
+.utf8_nul:
+    xor eax, eax
+    stc                         ; CF = 1
+    pop ecx
+    ret
+
+;=============================================================================
+; Procedure: buf_str_clip
+; Purpose:   Appends at most ECX display columns of NUL-terminated string ESI
+;            to out_buf. Counts display columns (not bytes) by identifying UTF-8
+;            sequences. Copies complete multibyte characters without splitting.
+;            If string length exceeds ECX columns, appends clipping marker '~'
+;            (UI_CLIP_MARKER) within the ECX column budget. If ECX is 0, emits
+;            nothing. Sanitizes control characters (< 0x20, 0x7F, ESC) and
+;            malformed UTF-8 sequences to '?' (CHAR_QUESTION).
+; IN:        ESI = Pointer to NUL-terminated source string,
+;            ECX = Maximum display columns allowed
+; OUT:       Appends clipped string and optional marker to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+buf_str_clip:
+    save_regs
+    push eax
+    sub esp, 16                 ; [esp] = max_cols, [esp+4] = budget, [esp+8] = needs_clip, [esp+12] = orig_esi
+
+    mov [esp], ecx              ; Store max_cols
+    mov [esp + 12], esi         ; Store original ESI
+    mov dword [esp + 8], 0      ; needs_clip = 0
+
+    ; If max_cols == 0, emit nothing
+    test ecx, ecx
+    jz .str_clip_done
+
+    ; Pass 1: Measure total display columns of source string
+    xor edx, edx                ; EDX = total display columns
+    mov ebx, esi                ; EBX = scan pointer
+.pass1_loop:
+    cmp byte [ebx], CHAR_NULL
+    je .pass1_done
+    mov esi, ebx
+    call utf8_char_len          ; EAX = byte length (1..4)
+    test eax, eax
+    jz .pass1_done
+    add ebx, eax                ; Advance scan pointer by byte length
+    inc edx                     ; 1 display column
+    jmp .pass1_loop
+
+.pass1_done:
+    ; Compare total_cols (EDX) with max_cols ([esp])
+    cmp edx, [esp]
+    jbe .no_clip_needed
+
+    ; Clipping required: needs_clip = 1
+    mov dword [esp + 8], 1
+    ; budget = max_cols - 1 (reserve 1 column for marker)
+    mov eax, [esp]
+    dec eax
+    mov [esp + 4], eax
+    jmp .pass2_init
+
+.no_clip_needed:
+    ; Fits completely: budget = max_cols
+    mov eax, [esp]
+    mov [esp + 4], eax
+
+.pass2_init:
+    ; Pass 2: Emit characters up to budget display columns
+    mov esi, [esp + 12]         ; Restore ESI to start of string
+    xor edx, edx                ; EDX = emitted column count
+
+.pass2_loop:
+    cmp edx, [esp + 4]          ; Check if reached column budget
+    jae .pass2_done
+    cmp byte [esi], CHAR_NULL
+    je .pass2_done
+
+    call utf8_char_len          ; EAX = byte length, CF = 1 if invalid
+    test eax, eax
+    jz .pass2_done
+
+    jc .emit_sanitized
+
+    ; Valid character: emit EAX bytes
+    push ecx
+    mov ecx, eax
+.emit_bytes_loop:
+    mov al, [esi]
+    call buf_char
+    inc esi
+    dec ecx
+    jnz .emit_bytes_loop
+    pop ecx
+    inc edx                     ; Column count++
+    jmp .pass2_loop
+
+.emit_sanitized:
+    add esi, eax                ; Advance by byte length (1)
+    mov al, CHAR_QUESTION       ; '?'
+    call buf_char
+    inc edx                     ; Column count++
+    jmp .pass2_loop
+
+.pass2_done:
+    ; Emit clipping marker '~' if clipping was required
+    cmp dword [esp + 8], 1
+    jne .str_clip_done
+    cmp dword [esp], 0
+    jbe .str_clip_done
+    mov al, UI_CLIP_MARKER      ; '~'
+    call buf_char
+
+.str_clip_done:
+    add esp, 16
+    pop eax
+    restore_regs
+    ret

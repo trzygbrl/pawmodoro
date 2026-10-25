@@ -35,6 +35,7 @@
 ;=============================================================================
 timer_draw:
     call ui_size_gate           ; Terminal dimension check gate (Task 9)
+    call ui_layout_update       ; Recalculate adaptive layout geometry (PRD v2 §2)
     save_regs
     push eax                    ; [esp] = frame mode (0..4)
 
@@ -43,14 +44,14 @@ timer_draw:
     ; -------------------------------------------------------------------------
     ; Start frame at home position (1, 1)
     mov eax, UI_TIMER_ROW_TOP
-    mov ebx, UI_FRAME_COL_LEFT
-    call buf_goto
+    mov ebx, 1
+    call ui_goto
 
     ; Row 1: Top border line
     mov eax, UI_TIMER_ROW_TOP
     call ui_frame_hline
 
-    ; Rows 2..9: Erase each row with ESC[K and anchor right border '|' at col 56
+    ; Rows 2..9: Erase each row with ESC[K and anchor right border '|' at col ui_w
     mov eax, UI_TIMER_ROW_TITLE
     call ui_frame_row
     mov eax, UI_TIMER_ROW_BLANK1
@@ -74,7 +75,7 @@ timer_draw:
 
     ; Row 11: Erase to bottom of terminal screen (ESC[J) to clear leftover lines
     mov eax, UI_TIMER_ROW_BELOW
-    mov ebx, UI_FRAME_COL_LEFT
+    mov ebx, 1
     call buf_goto
     mov esi, ansi_erase_eos
     call buf_str
@@ -85,7 +86,7 @@ timer_draw:
     ; 1. Title Row (Row 2, Col 4): "<PHASE> - Session n of 4"
     mov eax, UI_TIMER_ROW_TITLE
     mov ebx, UI_TIMER_COL_TITLE
-    call buf_goto
+    call ui_goto
 
     mov esi, ansi_bold
     call buf_str
@@ -112,13 +113,14 @@ timer_draw:
     mov esi, ansi_reset
     call buf_str
 
-    ; 2. [DEMO] badge at (Row 2, Col 46) if demo_mode == 1
+    ; 2. [DEMO] badge at (Row 2, Col ui_w - 8) if demo_mode == 1
     cmp dword [demo_mode], 1
     jne .skip_demo_badge
 
     mov eax, UI_TIMER_ROW_TITLE
-    mov ebx, UI_TIMER_COL_DEMO
-    call buf_goto
+    mov ebx, [ui_w]
+    sub ebx, UI_TIMER_OFF_DEMO  ; ui_w - 8
+    call ui_goto
     mov esi, ansi_bold
     call buf_str
     mov esi, ansi_fg_bright_green
@@ -139,7 +141,7 @@ timer_draw:
     ; 4. Time display MM:SS at Row 5, Col 20 (beside middle cat row)
     mov eax, UI_TIMER_ROW_CAT2
     mov ebx, UI_TIMER_COL_TIME
-    call buf_goto
+    call ui_goto
 
     mov esi, ansi_bold
     call buf_str
@@ -156,7 +158,7 @@ timer_draw:
 
     mov eax, UI_TIMER_ROW_CAT2
     mov ebx, UI_TIMER_COL_PAUSED
-    call buf_goto
+    call ui_goto
     mov esi, ansi_bold
     call buf_str
     mov esi, ansi_fg_bright_yellow
@@ -170,7 +172,7 @@ timer_draw:
     ; 6. Progress bar at Row 7, Col 5 (elapsed = total - remaining)
     mov eax, UI_TIMER_ROW_PROGRESS
     mov ebx, UI_TIMER_COL_PROGRESS
-    call buf_goto
+    call ui_goto
 
     mov eax, [total_secs]
     sub eax, [remaining_secs]    ; EAX = elapsed seconds
@@ -258,7 +260,7 @@ timer_draw:
 .help_mode_running:
     mov eax, UI_TIMER_ROW_HELP
     mov ebx, UI_TIMER_COL_HELP
-    call buf_goto
+    call ui_goto
     mov esi, ansi_fg_cyan
     call buf_str
     cmp dword [paused], 1
@@ -276,7 +278,7 @@ timer_draw:
 .help_mode_break_done:
     mov eax, UI_TIMER_ROW_HELP
     mov ebx, UI_TIMER_COL_HELP
-    call buf_goto
+    call ui_goto
     mov esi, ansi_fg_cyan
     call buf_str
     mov esi, timer_help_break_done
@@ -288,7 +290,7 @@ timer_draw:
 .help_mode_focus_done:
     mov eax, UI_TIMER_ROW_HELP
     mov ebx, UI_TIMER_COL_HELP
-    call buf_goto
+    call ui_goto
     mov esi, ansi_fg_cyan
     call buf_str
     mov esi, timer_help_focus_prompt
@@ -300,7 +302,7 @@ timer_draw:
 .help_mode_note_result:
     mov eax, UI_TIMER_ROW_HELP
     mov ebx, UI_TIMER_COL_HELP
-    call buf_goto
+    call ui_goto
     mov esi, ansi_fg_cyan
     call buf_str
     mov esi, timer_help_note_result
@@ -544,6 +546,24 @@ timer_run:
     jmp .phase_entry
 
 .no_key:
+    ; Check if terminal dimensions changed while idle (including when paused)
+    call term_size_ok
+    test eax, eax
+    jz .timer_resized           ; Shrunk below 80x24: trigger redraw (enters size gate)
+    mov edx, [term_cols]
+    cmp edx, [ui_seen_cols]
+    jne .timer_resized
+    mov edx, [term_rows]
+    cmp edx, [ui_seen_rows]
+    jne .timer_resized
+    jmp .timer_check_paused
+
+.timer_resized:
+    xor eax, eax                ; Normal running/paused frame (mode 0)
+    call timer_draw
+    call buf_flush
+
+.timer_check_paused:
     ; If paused, countdown is frozen: do not advance ticks or seconds
     cmp dword [paused], 1
     je .tick_loop
@@ -604,7 +624,7 @@ timer_run:
     mov ebx, UI_TIMER_COL_MSG
     add ebx, eax                ; EBX = col right after prompt
     mov eax, UI_TIMER_ROW_MSG
-    call buf_goto
+    call ui_goto
 
     ; Read note text via read_line in cooked mode
     mov edi, line_buf

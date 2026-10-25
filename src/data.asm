@@ -245,6 +245,11 @@ section .data
 
     ; Screen Headers & UI Labels
     habits_hdr:                 db "#  HABIT        LAST 7 DAYS         STREAK TOTAL", CHAR_NULL
+    habits_hdr_num:             db "#", CHAR_NULL
+    habits_hdr_name:            db "HABIT", CHAR_NULL
+    habits_hdr_squares:         db "LAST 7 DAYS", CHAR_NULL
+    habits_hdr_streak:          db "STREAK", CHAR_NULL
+    habits_hdr_total:           db "TOTAL", CHAR_NULL
     habits_help:                db "[A] Add  [1-8] Check in today  [D] Delete  [B] Back", CHAR_NULL
 
     ; Feedback and Status Messages (ASCII only)
@@ -340,6 +345,13 @@ section .bss
     winsize:                    resb WINSIZE_SIZE           ; 8 bytes {ws_row, ws_col, ws_xpixel, ws_ypixel}
     term_cols:                  resd 1                      ; Cached terminal columns
     term_rows:                  resd 1                      ; Cached terminal rows
+
+    ; Adaptive UI layout variables (PRD v2 §2)
+    ui_w:                       resd 1                      ; Frame width in columns (min(term_cols - 2, 100))
+    ui_h:                       resd 1                      ; Terminal height in rows (term_rows)
+    ui_col0:                    resd 1                      ; 0-based horizontal frame margin ((term_cols - ui_w) / 2)
+    ui_seen_cols:               resd 1                      ; Last rendered terminal width for resize detection
+    ui_seen_rows:               resd 1                      ; Last rendered terminal height for resize detection
 
     ; Main Menu Status Message Pointer and Style
     menu_msg:                   resd 1                      ; Pointer to status string (0 = none)

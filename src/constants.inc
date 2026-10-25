@@ -194,12 +194,22 @@ TEST_VECTOR_19723       equ 19723       ; Day number for 2024-01-01
 SLEEP_DEMO_COUNT        equ 10          ; 10 iterations of 100ms sleep for demo
 
 ; =============================================================================
-; Task 4 Additions: UI Frame Geometry, Cat Art & Shell Navigation (PRD §4.1, §5)
+; Task 4 & V2 Additions: UI Frame Geometry, Cat Art & Adaptive Layout (PRD v2 §2)
 ; =============================================================================
-UI_FRAME_WIDTH          equ 56          ; Total frame width in columns
-UI_FRAME_INNER_WIDTH    equ 54          ; Inner horizontal border width (56 - 2)
-UI_FRAME_COL_LEFT       equ 1           ; Left border column
-UI_FRAME_COL_RIGHT      equ 56          ; Right border column
+UI_FRAME_WIDTH          equ 56          ; Legacy fixed frame width in columns
+UI_FRAME_INNER_WIDTH    equ 54          ; Legacy inner horizontal border width (56 - 2)
+UI_FRAME_COL_LEFT       equ 1           ; Frame-relative left border column
+UI_FRAME_COL_RIGHT      equ 56          ; Legacy right border column
+
+; V2 Adaptive Layout Constants (PRD v2 §2)
+UI_FRAME_MAX_WIDTH      equ 100         ; Maximum frame width in columns
+UI_FRAME_MARGIN_COLS    equ 2           ; Margin subtracted from term_cols (term_cols - 2)
+UI_CLIP_MARKER          equ CHAR_TILDE  ; '~' (0x7E) clipping marker for truncated text
+UI_TIMER_OFF_DEMO       equ 8           ; Offset from ui_w to [DEMO] badge column (ui_w - 8)
+UI_HAB_OFF_SQUARES      equ 36          ; Offset from ui_w to 7-day history squares (ui_w - 36)
+UI_HAB_OFF_STREAK       equ 13          ; Offset from ui_w to streak count (ui_w - 13)
+UI_HAB_OFF_TOTAL        equ 6           ; Offset from ui_w to total check-ins (ui_w - 6)
+UI_JRN_TEXT_MARGIN      equ 6           ; Journal display width margin (ui_w - 6)
 
 ; Main Menu Row Coordinates
 UI_MENU_ROW_TOP         equ 1           ; Top border row

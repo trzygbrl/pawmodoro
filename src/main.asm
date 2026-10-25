@@ -89,12 +89,21 @@ _start:
     mov dword [need_redraw], 0
 
 .wait_for_input:
-    ; Low-CPU sleep loop checking terminal dimensions and polling input (FR-U1, FR-T5)
+    ; Low-CPU sleep loop checking terminal dimensions and polling input (FR-U1, FR-T5, PRD v2 §2)
     call time_sleep_100ms
     call term_size_ok
     test eax, eax
-    jnz .poll_input
-    ; Terminal shrunk below 80x24: trigger redraw to enter ui_size_gate immediately
+    jz .main_resized            ; Terminal shrunk below 80x24: trigger redraw to enter ui_size_gate immediately
+    ; Check if terminal dimensions changed while >= 80x24
+    mov edx, [term_cols]
+    cmp edx, [ui_seen_cols]
+    jne .main_resized
+    mov edx, [term_rows]
+    cmp edx, [ui_seen_rows]
+    jne .main_resized
+    jmp .poll_input
+
+.main_resized:
     mov dword [need_redraw], 1
     jmp .main_loop
 

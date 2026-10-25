@@ -215,7 +215,7 @@ habits_draw_row:
     ; 2. Render Habit Number at (Row, Col 4): "<num>."
     mov eax, [esp + 4]          ; EAX = row
     mov ebx, UI_HAB_COL_NUM     ; EBX = Col 4
-    call buf_goto
+    call ui_goto
 
     mov eax, [esp]              ; EAX = index (0..7)
     inc eax                     ; Display 1-based (1..8)
@@ -223,33 +223,26 @@ habits_draw_row:
     mov al, CHAR_DOT            ; '.'
     call buf_char
 
-    ; 3. Render Habit Name at (Row, Col 7) - Truncated to 12 chars & sanitized
+    ; 3. Render Habit Name at (Row, Col 7) - Clipped via buf_str_clip
     mov eax, [esp + 4]
     mov ebx, UI_HAB_COL_NAME
-    call buf_goto
+    call ui_goto
 
-    xor ecx, ecx                ; ECX = character loop index (0..11)
-.row_name_loop:
-    cmp ecx, HABIT_NAME_DISPLAY ; 12 characters max
-    jae .row_name_done
-    mov al, [esi + HABIT_OFFSET_NAME + ecx]
-    test al, al
-    jz .row_name_done
+    ; Available width for habit name:
+    ; squares start at (ui_w - 36). Leaving 1 space gap before squares:
+    ; available = (ui_w - 36) - 1 - col_name = ui_w - 44
+    ; Clamp available columns to HABIT_NAME_MAX (31)
+    mov ecx, [ui_w]
+    sub ecx, 44
+    cmp ecx, HABIT_NAME_MAX     ; 31
+    jbe .row_clip_calc
+    mov ecx, HABIT_NAME_MAX
 
-    ; Sanitize non-printable characters (< 0x20 or == 0x7F)
-    cmp al, CHAR_SPACE
-    jb .row_sanitize
-    cmp al, 127
-    je .row_sanitize
-    jmp .row_print_char
-
-.row_sanitize:
-    mov al, CHAR_QUESTION       ; Replace unsafe byte with '?'
-
-.row_print_char:
-    call buf_char
-    inc ecx
-    jmp .row_name_loop
+.row_clip_calc:
+    push esi
+    add esi, HABIT_OFFSET_NAME  ; Pointer to habit name string
+    call buf_str_clip
+    pop esi
 
 .row_name_done:
     ; 4. Calculate delta = today - last_day (with last_day > today edge case guard)
@@ -305,10 +298,11 @@ habits_draw_row:
     ; EDI currently holds the shifted history bitmask
     push edx                    ; [esp] = displayed streak
 
-    ; 5. Render 7 History Squares at (Row, Col 20)
+    ; 5. Render 7 History Squares at (Row, Col ui_w - 36)
     mov eax, [esp + 8]          ; EAX = row coordinate
-    mov ebx, UI_HAB_COL_SQUARES ; EBX = Col 20
-    call buf_goto
+    mov ebx, [ui_w]
+    sub ebx, UI_HAB_OFF_SQUARES ; ui_w - 36
+    call ui_goto
 
     ; Iterate bits 6 down to 0 (oldest on left, newest on right)
     mov ecx, 6                  ; ECX = bit index (6..0)
@@ -349,18 +343,20 @@ habits_draw_row:
     dec ecx
     jns .row_squares_loop       ; Loop until ECX becomes negative (6 down to 0)
 
-    ; 6. Render Streak at (Row, Col 43)
+    ; 6. Render Streak at (Row, Col ui_w - 13)
     mov eax, [esp + 8]          ; EAX = row coordinate
-    mov ebx, UI_HAB_COL_STREAK  ; EBX = Col 43
-    call buf_goto
+    mov ebx, [ui_w]
+    sub ebx, UI_HAB_OFF_STREAK  ; ui_w - 13
+    call ui_goto
 
     pop eax                     ; Restore displayed streak from stack
     call buf_u32
 
-    ; 7. Render Total Check-ins at (Row, Col 50)
+    ; 7. Render Total Check-ins at (Row, Col ui_w - 6)
     mov eax, [esp + 4]          ; EAX = row coordinate
-    mov ebx, UI_HAB_COL_TOTAL   ; EBX = Col 50
-    call buf_goto
+    mov ebx, [ui_w]
+    sub ebx, UI_HAB_OFF_TOTAL   ; ui_w - 6
+    call ui_goto
 
     mov eax, [esp]              ; EAX = habit index
     call habits_get_record      ; EAX = record pointer
@@ -387,6 +383,7 @@ habits_draw_row:
 ;=============================================================================
 habits_draw:
     call ui_size_gate           ; Terminal dimension check gate (Task 9)
+    call ui_layout_update       ; Recalculate adaptive layout geometry (PRD v2 §2)
     save_regs
 
     ; -------------------------------------------------------------------------
@@ -394,14 +391,14 @@ habits_draw:
     ; -------------------------------------------------------------------------
     ; Position cursor at home (1,1)
     mov eax, UI_HAB_ROW_TOP
-    mov ebx, UI_FRAME_COL_LEFT
-    call buf_goto
+    mov ebx, 1
+    call ui_goto
 
     ; Row 1: Top border line
     mov eax, UI_HAB_ROW_TOP
     call ui_frame_hline
 
-    ; Rows 2..15: Erase each row with ESC[K and anchor right border '|' at col 56
+    ; Rows 2..15: Erase each row with ESC[K and anchor right border '|' at col ui_w
     mov ecx, UI_HAB_ROW_TITLE   ; Row 2
 .draw_erase_loop:
     mov eax, ecx
@@ -416,7 +413,7 @@ habits_draw:
 
     ; Row 17: Erase to bottom of terminal screen (ESC[J)
     mov eax, UI_HAB_ROW_BELOW
-    mov ebx, UI_FRAME_COL_LEFT
+    mov ebx, 1
     call buf_goto
     mov esi, ansi_erase_eos
     call buf_str
@@ -427,7 +424,7 @@ habits_draw:
     ; 1. Title Row (Row 2, Col 4): "HABIT TRACKER" (bold bright cyan)
     mov eax, UI_HAB_ROW_TITLE
     mov ebx, UI_HAB_COL_TITLE
-    call buf_goto
+    call ui_goto
 
     mov esi, ansi_bold
     call buf_str
@@ -438,18 +435,44 @@ habits_draw:
     mov esi, ansi_reset
     call buf_str
 
-    ; 2. Column Headers (Row 3, Col 4)
+    ; 2. Column Headers (Row 3, adaptive columns)
     mov eax, UI_HAB_ROW_HEADER
-    mov ebx, UI_HAB_COL_NUM
-    call buf_goto
+    mov ebx, UI_HAB_COL_NUM     ; Col 4
+    call ui_goto
+    mov esi, habits_hdr_num     ; "#"
+    call buf_str
 
-    mov esi, habits_hdr         ; "#  HABIT        LAST 7 DAYS         STREAK TOTAL"
+    mov eax, UI_HAB_ROW_HEADER
+    mov ebx, UI_HAB_COL_NAME    ; Col 7
+    call ui_goto
+    mov esi, habits_hdr_name    ; "HABIT"
+    call buf_str
+
+    mov eax, UI_HAB_ROW_HEADER
+    mov ebx, [ui_w]
+    sub ebx, UI_HAB_OFF_SQUARES ; ui_w - 36
+    call ui_goto
+    mov esi, habits_hdr_squares ; "LAST 7 DAYS"
+    call buf_str
+
+    mov eax, UI_HAB_ROW_HEADER
+    mov ebx, [ui_w]
+    sub ebx, UI_HAB_OFF_STREAK  ; ui_w - 13
+    call ui_goto
+    mov esi, habits_hdr_streak  ; "STREAK"
+    call buf_str
+
+    mov eax, UI_HAB_ROW_HEADER
+    mov ebx, [ui_w]
+    sub ebx, UI_HAB_OFF_TOTAL   ; ui_w - 6
+    call ui_goto
+    mov esi, habits_hdr_total   ; "TOTAL"
     call buf_str
 
     ; 3. Separator Border (Row 4)
     mov eax, UI_HAB_ROW_SEP
-    mov ebx, UI_FRAME_COL_LEFT
-    call buf_goto
+    mov ebx, 1
+    call ui_goto
     mov eax, UI_HAB_ROW_SEP
     call ui_frame_hline
 
@@ -464,7 +487,7 @@ habits_draw:
     ; Empty state: show prompt message on Row 5
     mov eax, UI_HAB_ROW_FIRST
     mov ebx, UI_HAB_COL_NUM
-    call buf_goto
+    call ui_goto
     mov esi, ansi_fg_bright_black
     call buf_str
     mov esi, habit_msg_empty    ; "No habits yet - press A to add one."
@@ -501,7 +524,7 @@ habits_draw:
 
     mov eax, UI_HAB_ROW_MSG
     mov ebx, UI_HAB_COL_MSG
-    call buf_goto
+    call ui_goto
 
     ; Format message color according to category
     cmp esi, err_could_not_save
@@ -542,7 +565,7 @@ habits_draw:
     ; 6. Key Help Prompt (Row 15, Col 4)
     mov eax, UI_HAB_ROW_HELP
     mov ebx, UI_HAB_COL_HELP
-    call buf_goto
+    call ui_goto
 
     mov esi, habits_help
     call buf_str
@@ -684,7 +707,7 @@ habits_add:
     ; Position cursor at end of prompt on Row 14 (prompt length = 46 chars, col = 50)
     mov eax, UI_HAB_ROW_MSG
     mov ebx, UI_HAB_COL_MSG + 46 ; Col 50
-    call buf_goto
+    call ui_goto
 
     ; Read interactive line input via read_line in cooked mode
     mov edi, line_buf
@@ -903,8 +926,31 @@ habits_run:
     mov dword [need_redraw], 0
 
 .habits_wait_key:
-    call key_wait               ; Blocks sleeping 50ms; returns uppercase key in EAX
+    ; Low-CPU 50ms sleep via sys_nanosleep while polling for terminal resize (PRD v2 §2)
+    mov dword [timespec], 0
+    mov dword [timespec + 4], NANOSLEEP_50MS
+    syscall SYS_NANOSLEEP, timespec, 0
 
+    call term_size_ok
+    test eax, eax
+    jz .habits_need_redraw      ; Shrunk below 80x24: trigger redraw (enters size gate)
+    mov edx, [term_cols]
+    cmp edx, [ui_seen_cols]
+    jne .habits_need_redraw
+    mov edx, [term_rows]
+    cmp edx, [ui_seen_rows]
+    jne .habits_need_redraw
+
+    call key_poll
+    cmp eax, KEY_NONE
+    je .habits_wait_key
+    jmp .habits_dispatch_key
+
+.habits_need_redraw:
+    mov dword [need_redraw], 1
+    jmp .habits_loop
+
+.habits_dispatch_key:
     ; Dispatch global and navigation keys
     cmp eax, KEY_CTRL_C
     je .key_ctrl_c

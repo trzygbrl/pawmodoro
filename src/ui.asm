@@ -64,14 +64,14 @@ ui_draw_cat:
     ; Line 1: cat_row, cat_col
     mov eax, [cat_row]
     mov ebx, [cat_col]
-    call buf_goto
+    call ui_goto
     call buf_str
 
     ; Line 2: cat_row + 1, cat_col
     mov eax, [cat_row]
     inc eax
     mov ebx, [cat_col]
-    call buf_goto
+    call ui_goto
     mov esi, edx                ; Line 2 pointer
     call buf_str
 
@@ -79,7 +79,7 @@ ui_draw_cat:
     mov eax, [cat_row]
     add eax, 2
     mov ebx, [cat_col]
-    call buf_goto
+    call ui_goto
     mov esi, ecx                ; Line 3 pointer
     call buf_str
 
@@ -93,8 +93,9 @@ ui_draw_cat:
 
 ;=============================================================================
 ; Procedure: ui_frame_hline
-; Purpose:   Positions cursor at (row, 1) and appends '+' followed by 54 '-'
-;            characters and a trailing '+'. Total line width is exactly 56 cols.
+; Purpose:   Positions cursor at frame (row, 1) and appends '+' followed by
+;            (ui_w - 2) '-' characters and a trailing '+'. Total line width is
+;            exactly ui_w cols. Appends ESC[K to clear remainder of line.
 ; IN:        EAX = Row coordinate (1-based)
 ; OUT:       Appends horizontal frame line to out_buf
 ; CLOBBERS:  None (preserves all)
@@ -103,17 +104,18 @@ ui_frame_hline:
     save_regs
     push eax
 
-    ; Position cursor at (row, 1)
-    mov ebx, UI_FRAME_COL_LEFT  ; 1
-    call buf_goto
+    ; Position cursor at frame (row, 1)
+    mov ebx, 1
+    call ui_goto
 
     ; Left corner '+'
     mov al, CHAR_PLUS
     call buf_char
 
-    ; 54 horizontal border dashes '-'
+    ; (ui_w - 2) horizontal border dashes '-'
     mov al, CHAR_MINUS
-    mov ecx, UI_FRAME_INNER_WIDTH ; 54
+    mov ecx, [ui_w]
+    sub ecx, 2
     call buf_repeat
 
     ; Right corner '+'
@@ -130,10 +132,9 @@ ui_frame_hline:
 
 ;=============================================================================
 ; Procedure: ui_frame_row
-; Purpose:   Positions cursor at (row, 1), writes left border '|', erases from
-;            cursor to end of line via ESC[K (obliterating any leftover text from
-;            previous screens), positions cursor at absolute column 56, and writes
-;            the right border '|'. Eliminates inner padding calculations.
+; Purpose:   Positions cursor at frame (row, 1), writes left border '|', erases
+;            from cursor to end of line via ESC[K (obliterating any leftover text),
+;            positions cursor at frame column ui_w, and writes right border '|'.
 ; IN:        EAX = Row coordinate (1-based)
 ; OUT:       Appends cleared framed row to out_buf
 ; CLOBBERS:  None (preserves all)
@@ -142,9 +143,9 @@ ui_frame_row:
     save_regs
     push eax
 
-    ; 1. Move to (row, 1)
-    mov ebx, UI_FRAME_COL_LEFT  ; 1
-    call buf_goto
+    ; 1. Move to frame (row, 1)
+    mov ebx, 1
+    call ui_goto
 
     ; 2. Emit left border '|'
     mov al, CHAR_PIPE
@@ -154,10 +155,10 @@ ui_frame_row:
     mov esi, ansi_erase_eol
     call buf_str
 
-    ; 4. Move directly to absolute right border column 56
+    ; 4. Move directly to frame right border column ui_w
     mov eax, [esp]              ; Retrieve row
-    mov ebx, UI_FRAME_COL_RIGHT ; 56
-    call buf_goto
+    mov ebx, [ui_w]
+    call ui_goto
 
     ; 5. Emit right border '|'
     mov al, CHAR_PIPE
@@ -169,9 +170,9 @@ ui_frame_row:
 
 ;=============================================================================
 ; Procedure: ui_text_at
-; Purpose:   Helper routine that positions cursor at (row, col) and appends
-;            the string at ESI to out_buf.
-; IN:        EAX = Row coordinate (1-based), EBX = Column coordinate (1-based),
+; Purpose:   Helper routine that positions cursor at frame-relative (row, col)
+;            and appends the string at ESI to out_buf.
+; IN:        EAX = Row coordinate (1-based), EBX = Column coordinate (1-based, frame-relative),
 ;            ESI = Pointer to NUL-terminated string
 ; OUT:       Appends positioning and text to out_buf
 ; CLOBBERS:  None (preserves all)
@@ -180,8 +181,104 @@ ui_text_at:
     save_regs
     push eax
 
-    call buf_goto
+    call ui_goto
     call buf_str
+
+    pop eax
+    restore_regs
+    ret
+
+;=============================================================================
+; Procedure: ui_goto
+; Purpose:   Translates 1-based frame-relative coordinates (row, col) to absolute
+;            terminal coordinates using ui_col0 (col_abs = col + ui_col0, row_abs = row)
+;            and appends the ANSI cursor sequence ESC[r;cH to out_buf via buf_goto.
+; IN:        EAX = Row coordinate (1-based)
+;            EBX = Frame-relative column coordinate (1-based)
+; OUT:       Appends ANSI cursor sequence to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_goto:
+    save_regs
+    push eax
+
+    add ebx, [ui_col0]          ; Translate frame-relative col to absolute terminal col
+    call buf_goto
+
+    pop eax
+    restore_regs
+    ret
+
+;=============================================================================
+; Procedure: ui_layout_update
+; Purpose:   Calculates adaptive layout geometry based on cached terminal
+;            dimensions (term_cols, term_rows):
+;              ui_w = min(term_cols - 2, 100)
+;              ui_h = term_rows
+;              ui_col0 = (term_cols - ui_w) / 2 (0-based horizontal frame margin)
+;            Guarantees valid bounds for undersized terminals (minimum 80x24 fallback).
+;            If terminal dimensions have changed since last frame, appends ansi_clear
+;            to out_buf to remove any leftover characters outside the new layout.
+; IN:        None (uses [term_cols] and [term_rows])
+; OUT:       Updates [ui_w], [ui_h], [ui_col0], [ui_seen_cols], [ui_seen_rows]
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_layout_update:
+    save_regs
+    push eax
+
+    ; Clamp / fallback to minimum dimensions if dimensions are 0 or below minimum
+    mov eax, [term_cols]
+    cmp eax, TERM_MIN_COLS      ; 80
+    jae .cols_ok
+    mov eax, TERM_MIN_COLS
+.cols_ok:
+    mov edx, [term_rows]
+    cmp edx, TERM_MIN_ROWS      ; 24
+    jae .rows_ok
+    mov edx, TERM_MIN_ROWS
+.rows_ok:
+    ; ui_h = term_rows
+    mov [ui_h], edx
+
+    ; ui_w = min(term_cols - 2, 100)
+    sub eax, UI_FRAME_MARGIN_COLS ; term_cols - 2
+    cmp eax, UI_FRAME_MAX_WIDTH  ; 100
+    jbe .w_ok
+    mov eax, UI_FRAME_MAX_WIDTH
+.w_ok:
+    mov [ui_w], eax
+
+    ; Horizontal margin = (term_cols - ui_w) / 2
+    ; ui_col0 = margin (0-based)
+    mov edx, [term_cols]
+    cmp edx, TERM_MIN_COLS
+    jae .term_cols_ok
+    mov edx, TERM_MIN_COLS
+.term_cols_ok:
+    sub edx, eax                ; EDX = term_cols - ui_w
+    shr edx, 1                  ; Integer division by 2
+    mov [ui_col0], edx
+
+    ; If terminal dimensions changed since last layout (and not first run),
+    ; append ansi_clear to clear stale cells from previous geometry
+    mov eax, [term_cols]
+    mov edx, [term_rows]
+    cmp dword [ui_seen_cols], 0
+    jz .record_seen
+
+    cmp eax, [ui_seen_cols]
+    jne .dim_changed
+    cmp edx, [ui_seen_rows]
+    je .record_seen
+
+.dim_changed:
+    mov esi, ansi_clear
+    call buf_str
+
+.record_seen:
+    mov [ui_seen_cols], eax
+    mov [ui_seen_rows], edx
 
     pop eax
     restore_regs
@@ -198,13 +295,14 @@ ui_text_at:
 ;=============================================================================
 ui_draw_menu:
     call ui_size_gate
+    call ui_layout_update
     save_regs
     push eax
 
-    ; Frame begins with cursor home via buf_goto(1, 1)
+    ; Frame begins with cursor home via ui_goto(1, 1)
     mov eax, UI_MENU_ROW_TOP
-    mov ebx, UI_FRAME_COL_LEFT
-    call buf_goto
+    mov ebx, 1
+    call ui_goto
 
     ; -------------------------------------------------------------------------
     ; Phase 1: Draw All Borders and Cleared Rows First
@@ -255,7 +353,7 @@ ui_draw_menu:
 
     ; Row 16: Move below frame and erase to end of screen (ESC[J)
     mov eax, UI_MENU_ROW_BELOW
-    mov ebx, UI_FRAME_COL_LEFT
+    mov ebx, 1
     call buf_goto
     mov esi, ansi_erase_eos
     call buf_str
@@ -272,7 +370,7 @@ ui_draw_menu:
     ; 2. Bold title "P A W M O D O R O" at Row 2, Col 14
     mov eax, UI_MENU_ROW_TITLE
     mov ebx, UI_MENU_COL_TITLE
-    call buf_goto
+    call ui_goto
     mov esi, ansi_bold
     call buf_str
     mov esi, ansi_fg_bright_cyan
@@ -285,7 +383,7 @@ ui_draw_menu:
     ; 3. Tagline "cozy focus - habits - notes" at Row 3, Col 14
     mov eax, UI_MENU_ROW_TAGLINE
     mov ebx, UI_MENU_COL_TITLE
-    call buf_goto
+    call ui_goto
     mov esi, ansi_fg_cyan
     call buf_str
     mov esi, menu_tagline
@@ -296,7 +394,7 @@ ui_draw_menu:
     ; 4. Dashboard line at Row 6, Col 4: "Today: N pomodoros      Habits: D/T done"
     mov eax, UI_MENU_ROW_DASH
     mov ebx, UI_MENU_COL_CONTENT
-    call buf_goto
+    call ui_goto
 
     mov esi, dash_lbl_today
     call buf_str
@@ -357,7 +455,7 @@ ui_draw_menu:
     ; [4] Demo mode: OFF / ON
     mov eax, UI_MENU_ROW_ITEM4
     mov ebx, UI_MENU_COL_CONTENT
-    call buf_goto
+    call ui_goto
     mov esi, menu_item_4_prefix
     call buf_str
 
@@ -414,14 +512,16 @@ ui_draw_menu:
 ; CLOBBERS:  None (preserves all)
 ;=============================================================================
 ui_draw_stub:
+    call ui_size_gate
+    call ui_layout_update
     save_regs
     push eax
     push esi                    ; Preserve title pointer across frame calls
 
-    ; Frame begins with cursor home via buf_goto(1, 1)
+    ; Frame begins with cursor home via ui_goto(1, 1)
     mov eax, UI_STUB_ROW_TOP
-    mov ebx, UI_FRAME_COL_LEFT
-    call buf_goto
+    mov ebx, 1
+    call ui_goto
 
     ; -------------------------------------------------------------------------
     ; Phase 1: Draw All Borders and Cleared Rows First
@@ -454,7 +554,7 @@ ui_draw_stub:
 
     ; Row 9: Move below frame and erase to end of screen (ESC[J)
     mov eax, UI_STUB_ROW_BELOW
-    mov ebx, UI_FRAME_COL_LEFT
+    mov ebx, 1
     call buf_goto
     mov esi, ansi_erase_eos
     call buf_str
@@ -465,7 +565,7 @@ ui_draw_stub:
     ; 1. Title at Row 2, Col 4
     mov eax, UI_STUB_ROW_TITLE
     mov ebx, UI_STUB_COL_TITLE
-    call buf_goto
+    call ui_goto
     mov esi, ansi_bold
     call buf_str
     mov esi, ansi_fg_bright_yellow
@@ -704,9 +804,9 @@ ui_draw_status:
     test esi, esi
     jz .status_done             ; NULL pointer: do not draw anything
 
-    ; Position cursor at (row, 4)
+    ; Position cursor at frame (row, 4)
     mov ebx, 4
-    call buf_goto
+    call ui_goto
 
     ; Retrieve style from stack
     mov ebx, [esp + 4]

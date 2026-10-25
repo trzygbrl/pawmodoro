@@ -367,11 +367,10 @@ journal_find_lines:
 ;=============================================================================
 ; Procedure: journal_draw_row
 ; Purpose:   Positions cursor at (EAX, UI_JRN_COL_TEXT = 4) and appends at most
-;            JOURNAL_DISPLAY_WIDTH (52) characters from [ESI] up to length ECX.
-;            Sanitizes non-printable characters (< 0x20 or == 0x7F) to '?' to
-;            prevent terminal escape sequence injection from corrupt files.
-;            Guarantees line does not exceed column 55, preserving the right border
-;            at column 56. Does not modify source buffer or file content.
+;            (ui_w - 6) display columns from line [ESI] (length ECX) via
+;            buf_str_clip. Guarantees line does not exceed ui_w - 2, preserving
+;            the right border at ui_w. Sanitizes non-printable bytes to '?' and
+;            handles UTF-8 sequences without splitting multibyte characters.
 ; IN:        EAX = Screen row coordinate (UI_JRN_ROW_FIRST + index),
 ;            ESI = Pointer to line start in jrnl_buf,
 ;            ECX = Line length in bytes
@@ -382,39 +381,31 @@ journal_draw_row:
     save_regs
     push eax
 
-    ; Position cursor at (row, Col 4)
+    ; Position cursor at frame (row, Col 4)
     mov ebx, UI_JRN_COL_TEXT    ; 4
-    call buf_goto
+    call ui_goto
 
-    ; Clamp display length to JOURNAL_DISPLAY_WIDTH (52 columns)
-    cmp ecx, JOURNAL_DISPLAY_WIDTH
-    jbe .row_len_clamped
-    mov ecx, JOURNAL_DISPLAY_WIDTH
+    ; Copy up to JOURNAL_MAX_LINE bytes to line_buf and NUL-terminate
+    push edi
+    mov edi, line_buf
+    cmp ecx, JOURNAL_MAX_LINE
+    jbe .copy_len_ok
+    mov ecx, JOURNAL_MAX_LINE
 
-.row_len_clamped:
-    test ecx, ecx
-    jz .row_draw_exit
+.copy_len_ok:
+    push ecx
+    cld
+    rep movsb
+    mov byte [edi], CHAR_NULL
+    pop ecx
+    pop edi
 
-.row_char_loop:
-    mov al, [esi]
+    ; Display width = ui_w - 6 (PRD v2 §2)
+    mov ecx, [ui_w]
+    sub ecx, UI_JRN_TEXT_MARGIN ; 6
+    mov esi, line_buf
+    call buf_str_clip
 
-    ; Sanitize non-printable characters (< 0x20 or == 0x7F)
-    cmp al, CHAR_SPACE
-    jb .row_sanitize
-    cmp al, 127
-    je .row_sanitize
-    jmp .row_emit_char
-
-.row_sanitize:
-    mov al, CHAR_QUESTION
-
-.row_emit_char:
-    call buf_char
-    inc esi
-    dec ecx
-    jnz .row_char_loop
-
-.row_draw_exit:
     pop eax
     restore_regs
     ret
@@ -434,6 +425,7 @@ journal_draw_row:
 ;=============================================================================
 journal_draw:
     call ui_size_gate           ; Terminal dimension check gate (Task 9)
+    call ui_layout_update       ; Recalculate adaptive layout geometry (PRD v2 §2)
     save_regs
 
     ; -------------------------------------------------------------------------
@@ -441,8 +433,8 @@ journal_draw:
     ; -------------------------------------------------------------------------
     ; Position cursor at home (1,1)
     mov eax, UI_JRN_ROW_TOP
-    mov ebx, UI_FRAME_COL_LEFT
-    call buf_goto
+    mov ebx, 1
+    call ui_goto
 
     ; Row 1: Top border line
     mov eax, UI_JRN_ROW_TOP
@@ -450,7 +442,7 @@ journal_draw:
     mov esi, ansi_erase_eol
     call buf_str
 
-    ; Rows 2..16: Erase each row with ESC[K and anchor right border '|' at col 56
+    ; Rows 2..16: Erase each row with ESC[K and anchor right border '|' at col ui_w
     mov ecx, UI_JRN_ROW_TITLE   ; Row 2
 .draw_erase_loop:
     mov eax, ecx
@@ -467,7 +459,7 @@ journal_draw:
 
     ; Row 18: Erase to bottom of terminal screen (ESC[J)
     mov eax, UI_JRN_ROW_BELOW
-    mov ebx, UI_FRAME_COL_LEFT
+    mov ebx, 1
     call buf_goto
     mov esi, ansi_erase_eos
     call buf_str
@@ -478,7 +470,7 @@ journal_draw:
     ; 1. Title Row (Row 2, Col 4): "JOURNAL" (bold bright cyan)
     mov eax, UI_JRN_ROW_TITLE
     mov ebx, UI_JRN_COL_TITLE
-    call buf_goto
+    call ui_goto
 
     mov esi, ansi_bold
     call buf_str
@@ -491,8 +483,8 @@ journal_draw:
 
     ; 2. Separator Border (Row 3)
     mov eax, UI_JRN_ROW_SEP
-    mov ebx, UI_FRAME_COL_LEFT
-    call buf_goto
+    mov ebx, 1
+    call ui_goto
     mov eax, UI_JRN_ROW_SEP
     call ui_frame_hline
     mov esi, ansi_erase_eol
@@ -506,7 +498,7 @@ journal_draw:
     ; View not active: show dim hint "Press V to view recent entries."
     mov eax, UI_JRN_ROW_FIRST
     mov ebx, UI_JRN_COL_TEXT
-    call buf_goto
+    call ui_goto
     mov esi, ansi_fg_bright_black
     call buf_str
     mov esi, jrnl_msg_initial_hint
@@ -524,7 +516,7 @@ journal_draw:
     ; No lines exist: show "No entries yet."
     mov eax, UI_JRN_ROW_FIRST
     mov ebx, UI_JRN_COL_TEXT
-    call buf_goto
+    call ui_goto
     mov esi, ansi_fg_bright_black
     call buf_str
     mov esi, jrnl_msg_empty      ; "No entries yet."
@@ -559,7 +551,7 @@ journal_draw:
 
     mov eax, UI_JRN_ROW_MSG
     mov ebx, UI_JRN_COL_MSG
-    call buf_goto
+    call ui_goto
 
     ; Format message color according to category
     cmp esi, err_could_not_save
@@ -598,7 +590,7 @@ journal_draw:
     ; 5. Key Help Prompt (Row 16, Col 4)
     mov eax, UI_JRN_ROW_HELP
     mov ebx, UI_JRN_COL_HELP
-    call buf_goto
+    call ui_goto
 
     mov esi, jrnl_help
     call buf_str
@@ -634,7 +626,7 @@ journal_new_entry:
     mov ebx, UI_JRN_COL_MSG
     add ebx, eax                ; EBX = column coordinate right after prompt
     mov eax, UI_JRN_ROW_MSG
-    call buf_goto
+    call ui_goto
 
     ; Read interactive line input via read_line in cooked mode
     mov edi, line_buf
@@ -709,8 +701,31 @@ journal_run:
     mov dword [need_redraw], 0
 
 .journal_wait_key:
-    call key_wait               ; Blocks sleeping 50ms; returns uppercase key in EAX
+    ; Low-CPU 50ms sleep via sys_nanosleep while polling for terminal resize (PRD v2 §2)
+    mov dword [timespec], 0
+    mov dword [timespec + 4], NANOSLEEP_50MS
+    syscall SYS_NANOSLEEP, timespec, 0
 
+    call term_size_ok
+    test eax, eax
+    jz .journal_need_redraw     ; Shrunk below 80x24: trigger redraw (enters size gate)
+    mov edx, [term_cols]
+    cmp edx, [ui_seen_cols]
+    jne .journal_need_redraw
+    mov edx, [term_rows]
+    cmp edx, [ui_seen_rows]
+    jne .journal_need_redraw
+
+    call key_poll
+    cmp eax, KEY_NONE
+    je .journal_wait_key
+    jmp .journal_dispatch_key
+
+.journal_need_redraw:
+    mov dword [need_redraw], 1
+    jmp .journal_loop
+
+.journal_dispatch_key:
     ; Dispatch global and navigation keys
     cmp eax, KEY_CTRL_C
     je .key_ctrl_c

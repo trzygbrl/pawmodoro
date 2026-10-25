@@ -128,7 +128,9 @@ wait_for_not() {
 
 overflow_check() {
     local ov
-    ov=$(cap | awk 'length($0)>56{print "row " NR ": " $0}')
+    # Terminal width is 80 columns; frame occupies columns 2..79 (ui_w=78, centered).
+    # No row may exceed the right frame border at column 79 or the terminal width.
+    ov=$(cap | awk 'length($0)>79{print "row " NR ": " $0}')
     if [ -n "$ov" ]; then
         return 1
     fi
@@ -430,28 +432,28 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# Scenario 16: Zero Screen Overflow (> 56 Columns)
+# Scenario 16: Zero Screen Overflow (Beyond Frame Boundary / Terminal Width)
 # -----------------------------------------------------------------------------
 send "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
 wait_for "P A W M O D O R O" 5
-OV_MENU=$(cap | awk 'length($0)>56{print}')
+OV_MENU=$(cap | awk 'length($0)>79{print}')
 send "2"
 wait_for "HABIT TRACKER" 5
-OV_HABITS=$(cap | awk 'length($0)>56{print}')
+OV_HABITS=$(cap | awk 'length($0)>79{print}')
 send "B"
 wait_for "P A W M O D O R O" 5
 send "3"
 wait_for "JOURNAL" 5
-OV_JRNL=$(cap | awk 'length($0)>56{print}')
+OV_JRNL=$(cap | awk 'length($0)>79{print}')
 send "B"
 wait_for "P A W M O D O R O" 5
 send "Q"
 sleep 0.4
 
 if [ -z "$OV_MENU" ] && [ -z "$OV_HABITS" ] && [ -z "$OV_JRNL" ]; then
-    pass "Scenario 16 - Zero screen overflow past column 56 across all screens"
+    pass "Scenario 16 - Zero screen overflow past frame boundary across all screens"
 else
-    fail "Scenario 16 - Lines exceeded 56 columns (Menu='$OV_MENU', Habits='$OV_HABITS', Jrnl='$OV_JRNL')"
+    fail "Scenario 16 - Lines exceeded frame boundary (Menu='$OV_MENU', Habits='$OV_HABITS', Jrnl='$OV_JRNL')"
 fi
 
 # -----------------------------------------------------------------------------
