@@ -70,6 +70,8 @@ CHAR_UPPER_H            equ 72          ; Uppercase letter H ('H')
 CHAR_PIPE               equ 124         ; Vertical bar / pipe symbol ('|')
 CHAR_TILDE              equ 126         ; Tilde symbol ('~', 0x7E)
 CHAR_UPPER_O            equ 79          ; Uppercase letter O ('O')
+CHAR_LOWER_M            equ 109         ; ASCII lowercase letter m ('m', for ANSI escapes)
+
 
 KEY_CTRL_C              equ 3           ; ASCII 3 (ETX / Ctrl+C)
 KEY_BACKSPACE           equ 127         ; Backspace / Delete
@@ -466,4 +468,64 @@ TIMER_FRAME_NOTE_RESULT equ 4           ; Note save result status message
 
 KEY_Y                   equ 89          ; ASCII uppercase 'Y'
 
+; =============================================================================
+; Task V4 Additions: 256-Color Theme Engine & Settings Persistence (PRD_V2 §4, §5)
+; =============================================================================
 
+; 12 Color Slots (Normative Order 0..11, PRD_V2 §4)
+SLOT_BORDER             equ 0           ; Frames, dividers, borders
+SLOT_TITLE              equ 1           ; Headings, brand title
+SLOT_ACCENT             equ 2           ; Interactive hints, key labels, badges
+SLOT_TEXT               equ 3           ; Primary body text
+SLOT_DIM                equ 4           ; Secondary labels, inactive items
+SLOT_OK                 equ 5           ; Success, completed status
+SLOT_WARN               equ 6           ; Warning, paused status
+SLOT_ERR                equ 7           ; Error messages, failed status
+SLOT_CAT                equ 8           ; Cat ASCII artwork
+SLOT_BAR_FULL           equ 9           ; Filled progress bar segments
+SLOT_BAR_EMPTY          equ 10          ; Empty progress bar segments
+SLOT_HIGHLIGHT          equ 11          ; Selected row background
+
+; Theme Subsystem Constants
+NUM_SLOTS               equ 12          ; Number of color slots per palette
+NUM_BUILTIN_THEMES      equ 7           ; Number of built-in themes (0..6)
+THEME_CUSTOM_INDEX      equ 7           ; Theme index for custom user palette
+THEME_MAX_INDEX         equ 7           ; Maximum valid theme index (0..7)
+COLOR_256_MAX           equ 255         ; Maximum 256-color palette index
+
+; Built-in Theme Indices
+THEME_STRAWBERRY        equ 0           ; Strawberry Milk (default warm look)
+THEME_MATCHA            equ 1           ; Matcha Latte
+THEME_BLUEBERRY         equ 2           ; Blueberry
+THEME_LAVENDER          equ 3           ; Lavender Night
+THEME_SUNSET            equ 4           ; Sunset Peach
+THEME_MONO              equ 5           ; Mono Cozy
+THEME_CONTRAST          equ 6           ; High Contrast
+THEME_CUSTOM            equ 7           ; Custom user-defined palette
+
+; Settings Persistence File Format (settings.dat, 24 bytes, PRD_V2 §5)
+SETTINGS_FILE_SIZE      equ 24          ; Exact settings.dat file size in bytes
+SETTINGS_MAGIC          equ 0x53574150  ; Little-endian magic dword ('PAWS': 0x50, 0x41, 0x57, 0x53)
+SETTINGS_VERSION        equ 1           ; Settings file format version
+
+; Settings Record Field Offsets (PRD_V2 §5)
+SETTINGS_OFF_MAGIC      equ 0           ; Offset 0: 4 bytes dword magic
+SETTINGS_OFF_VERSION    equ 4           ; Offset 4: 1 byte version (1)
+SETTINGS_OFF_THEME      equ 5           ; Offset 5: 1 byte active theme index (0..7)
+SETTINGS_OFF_CUSTOM     equ 6           ; Offset 6: 12 bytes custom palette indices
+SETTINGS_OFF_ANIM       equ 18          ; Offset 18: 1 byte animation flag (0 or 1)
+SETTINGS_OFF_SOUND      equ 19          ; Offset 19: 1 byte sound flag (0 or 1)
+SETTINGS_OFF_CHARSET    equ 20          ; Offset 20: 1 byte charset flag (0 = UTF-8, 1 = ASCII)
+SETTINGS_OFF_NOTIFY     equ 21          ; Offset 21: 1 byte notification master flag (0 or 1)
+SETTINGS_OFF_LAYERS     equ 22          ; Offset 22: 1 byte notification layers bitmask
+SETTINGS_OFF_VOLUME     equ 23          ; Offset 23: 1 byte audio volume (0..3)
+
+; Settings Field Validation Limits & Default Values (PRD_V2 §5)
+NOTIFY_LAYERS_MASK      equ 0x1F        ; Valid bits 0..4 (bell, flash, title, progress, desktop)
+MAX_VOLUME              equ 3           ; Maximum valid volume level (0..3)
+DEFAULT_ANIM            equ 1           ; Default animation: enabled (1)
+DEFAULT_SOUND           equ 0           ; Default sound: disabled (0)
+DEFAULT_CHARSET         equ 0           ; Default charset: UTF-8 (0)
+DEFAULT_NOTIFY          equ 0           ; Default notification master: disabled (0)
+DEFAULT_NOTIFY_LAYERS   equ 0x01        ; Default notification layers: bell only (bit 0)
+DEFAULT_VOLUME          equ 2           ; Default volume: 2 (medium)

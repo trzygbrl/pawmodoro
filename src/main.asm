@@ -19,10 +19,12 @@
 section .text
 
 %include "src/io.asm"
+%include "src/theme.asm"
 %include "src/term.asm"
 %include "src/time.asm"
 %include "src/ui.asm"
 %include "src/file.asm"
+%include "src/settings.asm"
 %include "src/stats.asm"
 %include "src/timer.asm"
 %include "src/habits.asm"
@@ -47,6 +49,7 @@ _start:
     call term_init              ; Query terminal attributes and switch to alternate screen
     call term_install_signals   ; Install SIGHUP, SIGINT, SIGTERM signal handlers (Task 9)
     call term_raw               ; Configure non-canonical, non-blocking raw mode
+    call settings_load          ; Load persisted settings.dat & initialize theme palette (Task V4)
     call stats_load             ; Load persisted stats.dat into memory & sync dashboard (FR-U7, FR-D2)
     call habits_load            ; Load persisted habits.dat into memory & sync dashboard (FR-U7, FR-D3)
     call dashboard_refresh      ; Initialize live dashboard values in memory (Task 9)

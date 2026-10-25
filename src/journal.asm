@@ -706,9 +706,11 @@ journal_draw_entry:
     mov ebx, UI_JRN_COL_TEXT    ; Col 4
     call ui_goto
 
-    ; If highlighted, emit reverse video sequence
+    ; If highlighted, emit background color and reverse video sequence
     cmp dword [ebp - 12], 0
     jz .row1_no_rev
+    mov al, SLOT_HIGHLIGHT
+    call ui_bgcolor
     mov esi, ansi_reverse
     call buf_str
 
@@ -826,9 +828,11 @@ journal_draw_entry:
     mov ebx, UI_JRN_COL_TEXT
     call ui_goto
 
-    ; If highlighted, emit reverse video
+    ; If highlighted, emit background color and reverse video
     cmp dword [ebp - 12], 0
     jz .cont_no_rev
+    mov al, SLOT_HIGHLIGHT
+    call ui_bgcolor
     mov esi, ansi_reverse
     call buf_str
 
@@ -1046,8 +1050,8 @@ journal_draw:
 
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_cyan
-    call buf_str
+    mov al, SLOT_TITLE
+    call ui_color
     cmp dword [jrnl_full_view], 1
     je .draw_title_full
     mov esi, title_journal       ; "JOURNAL"
@@ -1081,8 +1085,8 @@ journal_draw:
     mov eax, UI_JRN_ROW_FIRST
     mov ebx, UI_JRN_COL_TEXT
     call ui_goto
-    mov esi, ansi_fg_bright_black
-    call buf_str
+    mov al, SLOT_DIM
+    call ui_color
     mov esi, jrnl_msg_empty      ; "No entries yet."
     call buf_str
     mov esi, ansi_reset
@@ -1159,22 +1163,22 @@ journal_draw:
     je .msg_color_green
 
     ; Default: yellow for warnings/prompts
-    mov esi, ansi_fg_bright_yellow
-    call buf_str
+    mov al, SLOT_WARN
+    call ui_color
     jmp .msg_print_body
 
 .msg_color_red:
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_red
-    call buf_str
+    mov al, SLOT_ERR
+    call ui_color
     jmp .msg_print_body
 
 .msg_color_green:
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_green
-    call buf_str
+    mov al, SLOT_OK
+    call ui_color
 
 .msg_print_body:
     mov esi, [jrnl_msg]

@@ -90,8 +90,8 @@ timer_draw:
 
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_cyan
-    call buf_str
+    mov al, SLOT_TITLE
+    call ui_color
 
     ; Fetch phase title pointer from table
     mov edx, [phase]
@@ -123,8 +123,8 @@ timer_draw:
     call ui_goto
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_green
-    call buf_str
+    mov al, SLOT_ACCENT
+    call ui_color
     mov esi, timer_lbl_demo
     call buf_str
     mov esi, ansi_reset
@@ -145,8 +145,8 @@ timer_draw:
 
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_white
-    call buf_str
+    mov al, SLOT_TEXT
+    call ui_color
     mov eax, [remaining_secs]
     call buf_mmss
     mov esi, ansi_reset
@@ -161,8 +161,8 @@ timer_draw:
     call ui_goto
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_yellow
-    call buf_str
+    mov al, SLOT_WARN
+    call ui_color
     mov esi, timer_lbl_paused
     call buf_str
     mov esi, ansi_reset
@@ -261,8 +261,8 @@ timer_draw:
     mov eax, UI_TIMER_ROW_HELP
     mov ebx, UI_TIMER_COL_HELP
     call ui_goto
-    mov esi, ansi_fg_cyan
-    call buf_str
+    mov al, SLOT_ACCENT
+    call ui_color
     cmp dword [paused], 1
     jne .emit_running_help
     mov esi, timer_help_paused
@@ -279,8 +279,8 @@ timer_draw:
     mov eax, UI_TIMER_ROW_HELP
     mov ebx, UI_TIMER_COL_HELP
     call ui_goto
-    mov esi, ansi_fg_cyan
-    call buf_str
+    mov al, SLOT_ACCENT
+    call ui_color
     mov esi, timer_help_break_done
     call buf_str
     mov esi, ansi_reset
@@ -291,8 +291,8 @@ timer_draw:
     mov eax, UI_TIMER_ROW_HELP
     mov ebx, UI_TIMER_COL_HELP
     call ui_goto
-    mov esi, ansi_fg_cyan
-    call buf_str
+    mov al, SLOT_ACCENT
+    call ui_color
     mov esi, timer_help_focus_prompt
     call buf_str
     mov esi, ansi_reset
@@ -303,8 +303,8 @@ timer_draw:
     mov eax, UI_TIMER_ROW_HELP
     mov ebx, UI_TIMER_COL_HELP
     call ui_goto
-    mov esi, ansi_fg_cyan
-    call buf_str
+    mov al, SLOT_ACCENT
+    call ui_color
     mov esi, timer_help_note_result
     call buf_str
     mov esi, ansi_reset

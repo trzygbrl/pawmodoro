@@ -312,8 +312,8 @@ habits_draw_row:
     jc .row_square_done
 
     ; Bit is 0: not done -> dim "[.]"
-    mov esi, ansi_fg_bright_black
-    call buf_str
+    mov al, SLOT_DIM
+    call ui_color
     mov al, CHAR_LBRACKET       ; '['
     call buf_char
     mov al, CHAR_DOT            ; '.'
@@ -328,8 +328,8 @@ habits_draw_row:
     ; Bit is 1: checked in -> bright green "[#]"
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_green
-    call buf_str
+    mov al, SLOT_OK
+    call ui_color
     mov al, CHAR_LBRACKET       ; '['
     call buf_char
     mov al, CHAR_HASH           ; '#'
@@ -428,8 +428,8 @@ habits_draw:
 
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_cyan
-    call buf_str
+    mov al, SLOT_TITLE
+    call ui_color
     mov esi, title_habits       ; "HABIT TRACKER"
     call buf_str
     mov esi, ansi_reset
@@ -488,8 +488,8 @@ habits_draw:
     mov eax, UI_HAB_ROW_FIRST
     mov ebx, UI_HAB_COL_NUM
     call ui_goto
-    mov esi, ansi_fg_bright_black
-    call buf_str
+    mov al, SLOT_DIM
+    call ui_color
     mov esi, habit_msg_empty    ; "No habits yet - press A to add one."
     call buf_str
     mov esi, ansi_reset
@@ -535,22 +535,22 @@ habits_draw:
     je .msg_color_green
 
     ; Default: yellow for warnings, alerts, and prompts
-    mov esi, ansi_fg_bright_yellow
-    call buf_str
+    mov al, SLOT_WARN
+    call ui_color
     jmp .msg_print_body
 
 .msg_color_red:
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_red
-    call buf_str
+    mov al, SLOT_ERR
+    call ui_color
     jmp .msg_print_body
 
 .msg_color_green:
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_green
-    call buf_str
+    mov al, SLOT_OK
+    call ui_color
 
 .msg_print_body:
     mov esi, [habit_msg]

@@ -55,11 +55,9 @@ ui_draw_cat:
     mov ecx, cat_p2_l3
 
 .render_art:
-    ; Apply cozy warm yellow foreground color
-    push esi
-    mov esi, ansi_fg_bright_yellow
-    call buf_str
-    pop esi
+    ; Apply cat artwork color slot
+    mov al, SLOT_CAT
+    call ui_color
 
     ; Line 1: cat_row, cat_col
     mov eax, [cat_row]
@@ -108,6 +106,10 @@ ui_frame_hline:
     mov ebx, 1
     call ui_goto
 
+    ; Frame border color
+    mov al, SLOT_BORDER
+    call ui_color
+
     ; Left corner '+'
     mov al, CHAR_PLUS
     call buf_char
@@ -121,6 +123,10 @@ ui_frame_hline:
     ; Right corner '+'
     mov al, CHAR_PLUS
     call buf_char
+
+    ; Reset border color styling
+    mov esi, ansi_reset
+    call buf_str
 
     ; Clear remainder of line to prevent wrapped text residue on border rows (Task 9)
     mov esi, ansi_erase_eol
@@ -147,9 +153,13 @@ ui_frame_row:
     mov ebx, 1
     call ui_goto
 
-    ; 2. Emit left border '|'
+    ; 2. Emit border color and left border '|'
+    mov al, SLOT_BORDER
+    call ui_color
     mov al, CHAR_PIPE
     call buf_char
+    mov esi, ansi_reset
+    call buf_str
 
     ; 3. Emit ESC[K (erase to end of line)
     mov esi, ansi_erase_eol
@@ -160,9 +170,13 @@ ui_frame_row:
     mov ebx, [ui_w]
     call ui_goto
 
-    ; 5. Emit right border '|'
+    ; 5. Emit border color and right border '|'
+    mov al, SLOT_BORDER
+    call ui_color
     mov al, CHAR_PIPE
     call buf_char
+    mov esi, ansi_reset
+    call buf_str
 
     pop eax
     restore_regs
@@ -373,8 +387,8 @@ ui_draw_menu:
     call ui_goto
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_cyan
-    call buf_str
+    mov al, SLOT_TITLE
+    call ui_color
     mov esi, menu_title
     call buf_str
     mov esi, ansi_reset
@@ -384,8 +398,8 @@ ui_draw_menu:
     mov eax, UI_MENU_ROW_TAGLINE
     mov ebx, UI_MENU_COL_TITLE
     call ui_goto
-    mov esi, ansi_fg_cyan
-    call buf_str
+    mov al, SLOT_ACCENT
+    call ui_color
     mov esi, menu_tagline
     call buf_str
     mov esi, ansi_reset
@@ -400,8 +414,8 @@ ui_draw_menu:
     call buf_str
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_yellow
-    call buf_str
+    mov al, SLOT_ACCENT
+    call ui_color
     mov eax, [dash_pomodoros]
     call buf_u32
     mov esi, ansi_reset
@@ -411,8 +425,8 @@ ui_draw_menu:
     call buf_str
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_yellow
-    call buf_str
+    mov al, SLOT_ACCENT
+    call ui_color
     mov eax, [dash_habits_done]
     call buf_u32
     mov esi, ansi_reset
@@ -423,8 +437,8 @@ ui_draw_menu:
 
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_yellow
-    call buf_str
+    mov al, SLOT_ACCENT
+    call ui_color
     mov eax, [dash_habits_total]
     call buf_u32
     mov esi, ansi_reset
@@ -461,8 +475,8 @@ ui_draw_menu:
 
     cmp dword [demo_mode], 0
     jne .menu_demo_active
-    mov esi, ansi_fg_bright_black
-    call buf_str
+    mov al, SLOT_DIM
+    call ui_color
     mov esi, menu_demo_off
     call buf_str
     mov esi, ansi_reset
@@ -472,8 +486,8 @@ ui_draw_menu:
 .menu_demo_active:
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_green
-    call buf_str
+    mov al, SLOT_OK
+    call ui_color
     mov esi, menu_demo_on
     call buf_str
     mov esi, ansi_reset
@@ -568,8 +582,8 @@ ui_draw_stub:
     call ui_goto
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_yellow
-    call buf_str
+    mov al, SLOT_TITLE
+    call ui_color
     pop esi                     ; Restore title string pointer
     call buf_str
     mov esi, ansi_reset
@@ -650,16 +664,24 @@ ui_progress_bar:
     mov al, CHAR_LBRACKET
     call buf_char
 
-    ; 2. Emit filled '#' characters (EBX times)
+    ; 2. Emit filled '#' characters (EBX times) with SLOT_BAR_FULL
+    mov al, SLOT_BAR_FULL
+    call ui_color
     mov al, CHAR_HASH
     mov ecx, ebx
     call buf_repeat
+    mov esi, ansi_reset
+    call buf_str
 
-    ; 3. Emit empty '-' characters (PROGRESS_BAR_WIDTH - EBX times)
+    ; 3. Emit empty '-' characters (PROGRESS_BAR_WIDTH - EBX times) with SLOT_BAR_EMPTY
+    mov al, SLOT_BAR_EMPTY
+    call ui_color
     mov al, CHAR_MINUS
     mov ecx, PROGRESS_BAR_WIDTH
     sub ecx, ebx
     call buf_repeat
+    mov esi, ansi_reset
+    call buf_str
 
     ; 4. Emit ']'
     mov al, CHAR_RBRACKET
@@ -721,8 +743,8 @@ ui_size_gate:
     call buf_goto
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_yellow
-    call buf_str
+    mov al, SLOT_WARN
+    call ui_color
     mov esi, ui_msg_enlarge
     call buf_str
     mov esi, ansi_reset
@@ -785,9 +807,9 @@ ui_size_gate:
 ; Procedure: ui_draw_status
 ; Purpose:   Positions cursor at (EAX, 4) and emits string at ESI styled
 ;            according to EBX:
-;              STATUS_INFO (0): ansi_fg_bright_yellow
-;              STATUS_OK (1):   ansi_bold + ansi_fg_bright_green
-;              STATUS_ERR (2):  ansi_bold + ansi_fg_bright_red
+;              STATUS_INFO (0): SLOT_WARN
+;              STATUS_OK (1):   ansi_bold + SLOT_OK
+;              STATUS_ERR (2):  ansi_bold + SLOT_ERR
 ;            If ESI is 0 (NULL), nothing is drawn.
 ;            Always emits ansi_reset after message.
 ; IN:        EAX = Row coordinate (1-based), EBX = Status style,
@@ -816,23 +838,23 @@ ui_draw_status:
     cmp ebx, STATUS_ERR
     je .status_style_err
 
-    ; STATUS_INFO: bright yellow
-    mov esi, ansi_fg_bright_yellow
-    call buf_str
+    ; STATUS_INFO: warning/info slot
+    mov al, SLOT_WARN
+    call ui_color
     jmp .status_emit
 
 .status_style_ok:
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_green
-    call buf_str
+    mov al, SLOT_OK
+    call ui_color
     jmp .status_emit
 
 .status_style_err:
     mov esi, ansi_bold
     call buf_str
-    mov esi, ansi_fg_bright_red
-    call buf_str
+    mov al, SLOT_ERR
+    call ui_color
 
 .status_emit:
     mov esi, [esp]              ; Retrieve message pointer

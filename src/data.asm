@@ -387,4 +387,81 @@ section .bss
     timer_result_msg:           resd 1                      ; Pointer to result string
     timer_result_style:         resd 1                      ; STATUS_OK or STATUS_ERR
 
+; =============================================================================
+; Task V4 Theme Engine and Settings Persistence Data & Buffers (PRD_V2 §4, §5)
+; =============================================================================
+section .data
 
+    ; ANSI 256-Color Escape Prefixes (PRD_V2 §4)
+    ; ESC [ 3 8 ; 5 ; <N> m (foreground)
+    ansi_fg_256_prefix:         db CHAR_ESC, "[38;5;", CHAR_NULL
+    ; ESC [ 4 8 ; 5 ; <N> m (background)
+    ansi_bg_256_prefix:         db CHAR_ESC, "[48;5;", CHAR_NULL
+
+    ; Settings Persistence File Path
+    path_settings:              db "settings.dat", CHAR_NULL
+
+    ; -------------------------------------------------------------------------
+    ; 7 Built-in Theme Palettes (Task V4, PRD_V2 §4)
+    ; Exactly 12 bytes each in normative slot order:
+    ; 0:BORDER, 1:TITLE, 2:ACCENT, 3:TEXT, 4:DIM, 5:OK, 6:WARN, 7:ERR, 8:CAT,
+    ; 9:BAR_FULL, 10:BAR_EMPTY, 11:HIGHLIGHT
+    ; -------------------------------------------------------------------------
+    themes_table:
+        ; Theme 0: Strawberry Milk (default warm look)
+        db 211, 204, 218, 254, 244, 114, 221, 203, 223, 204, 238, 53
+        ; Theme 1: Matcha Latte
+        db 108, 150, 114, 255, 243, 114, 221, 203, 180, 114, 238, 22
+        ; Theme 2: Blueberry
+        db 69,  111, 75,  255, 244, 114, 221, 203, 117, 75,  238, 17
+        ; Theme 3: Lavender Night
+        db 141, 183, 147, 253, 243, 114, 221, 203, 225, 141, 237, 54
+        ; Theme 4: Sunset Peach
+        db 215, 209, 216, 255, 244, 114, 221, 203, 223, 209, 238, 94
+        ; Theme 5: Mono Cozy
+        db 245, 255, 250, 252, 240, 250, 255, 255, 252, 255, 238, 240
+        ; Theme 6: High Contrast
+        db 231, 231, 226, 231, 250, 46,  226, 196, 231, 231, 240, 21
+
+    ; Theme Name Strings and Pointer Table (for all 8 themes including Custom)
+    theme_name_0:               db "Strawberry Milk", CHAR_NULL
+    theme_name_1:               db "Matcha Latte", CHAR_NULL
+    theme_name_2:               db "Blueberry", CHAR_NULL
+    theme_name_3:               db "Lavender Night", CHAR_NULL
+    theme_name_4:               db "Sunset Peach", CHAR_NULL
+    theme_name_5:               db "Mono Cozy", CHAR_NULL
+    theme_name_6:               db "High Contrast", CHAR_NULL
+    theme_name_7:               db "Custom", CHAR_NULL
+
+    theme_names:
+        dd theme_name_0
+        dd theme_name_1
+        dd theme_name_2
+        dd theme_name_3
+        dd theme_name_4
+        dd theme_name_5
+        dd theme_name_6
+        dd theme_name_7
+
+    ; Active 12-byte Palette read by ui_color and ui_bgcolor
+    ; Initialized to Strawberry Milk palette
+    active_palette:
+        db 211, 204, 218, 254, 244, 114, 221, 203, 223, 204, 238, 53
+
+    ; Persisted 12-byte Custom Palette (separate from built-ins, default copy of Strawberry Milk)
+    custom_palette:
+        db 211, 204, 218, 254, 244, 114, 221, 203, 223, 204, 238, 53
+
+    ; In-Memory Settings State Variables (.data initialized to defaults)
+    setting_theme:              db 0            ; Active theme index (0..7)
+    setting_anim:               db 1            ; Animation flag (0 or 1)
+    setting_sound:              db 0            ; Sound flag (0 or 1)
+    setting_charset:            db 0            ; Charset flag (0 = UTF-8, 1 = ASCII)
+    setting_notify:             db 0            ; Notification master flag (0 or 1)
+    setting_notify_layers:      db 0x01         ; Notification layer bitmask (b0 = bell)
+    setting_volume:             db 2            ; Volume (0..3)
+    settings_save_err:          db 0            ; Save failure flag (0 = OK, 1 = failure)
+
+section .bss
+
+    settings_buf:               resb 32
