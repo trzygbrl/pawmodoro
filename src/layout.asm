@@ -157,18 +157,20 @@ layout_rect:
     mov ebp, [ui_w]             ; EBP = frame_w
 
     ; Header height determination:
-    ; Compact: 4 rows; Standard: 5 rows; Grand: 6 rows
-    mov ecx, 4                  ; Compact header height
+    ; Compact: 5 rows (4 inner rows for 8x4 logo)
+    ; Standard: 7 rows (6 inner rows for 12x6 logo)
+    ; Grand: 8 rows (7 inner rows for 14x7 logo)
+    mov ecx, 5                  ; Compact header height
     cmp dword [layout_tier], TIER_GRAND
     je .hdr_grand
     cmp dword [layout_tier], TIER_STANDARD
     je .hdr_std
     jmp .hdr_done
 .hdr_grand:
-    mov ecx, 6
+    mov ecx, 8
     jmp .hdr_done
 .hdr_std:
-    mov ecx, 5
+    mov ecx, 7
 .hdr_done:
     ; ECX now holds header_h
 
@@ -435,17 +437,12 @@ layout_rect:
     jmp .rect_done
 
 .cmp_tip:
-    pop eax                     ; mid_r0
-    pop edx                     ; mid_h
-    push edx
-    shr edx, 1                  ; split_h
-    add eax, edx                ; row = mid_r0 + split_h
-    pop edx
-    shr edx, 1
-    push edx
-    mov edx, [esp + 4]          ; original mid_h
-    pop ebp                     ; split_h
-    sub edx, ebp                ; bot_h = mid_h - split_h
+    pop eax                     ; EAX = mid_r0
+    pop edx                     ; EDX = mid_h
+    mov esi, edx
+    shr esi, 1                  ; ESI = split_h = mid_h / 2
+    add eax, esi                ; row = mid_r0 + split_h
+    sub edx, esi                ; height = mid_h - split_h
     mov ebx, edi
     add ebx, 22                 ; main_col
     mov ecx, ebp                ; left_w
@@ -464,11 +461,12 @@ layout_rect:
 .cmp_journal_btn:
     pop eax                     ; mid_r0
     pop edx                     ; mid_h
-    shr edx, 1                  ; split_h
-    add eax, edx                ; row = mid_r0 + split_h
+    mov esi, edx
+    shr esi, 1                  ; split_h
+    add eax, esi                ; row = mid_r0 + split_h
     mov ebx, edi
     add ebx, 22
-    add ebx, ebp                ; main_col + left_w
+    add ebx, ebp                ; main_col + 22 + left_w
     mov edx, 2                  ; height = 2
     ; ECX already holds right_w
     jmp .rect_done
@@ -476,11 +474,11 @@ layout_rect:
 .cmp_journal:
     pop eax                     ; mid_r0
     pop edx                     ; mid_h
-    mov ebp, edx
-    shr ebp, 1                  ; split_h
-    add eax, ebp
+    mov esi, edx
+    shr esi, 1                  ; split_h
+    add eax, esi
     add eax, 2                  ; row = mid_r0 + split_h + 2
-    sub edx, ebp
+    sub edx, esi
     sub edx, 2                  ; height = mid_h - split_h - 2
     cmp edx, 1
     jge .cmp_jrn_h_ok
@@ -488,7 +486,7 @@ layout_rect:
 .cmp_jrn_h_ok:
     mov ebx, edi
     add ebx, 22
-    add ebx, [esp - 4]          ; main_col + left_w (re-add left_w)
+    add ebx, ebp                ; main_col + 22 + left_w
     ; ECX already holds right_w
     jmp .rect_done
 

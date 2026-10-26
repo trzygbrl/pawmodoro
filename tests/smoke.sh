@@ -159,7 +159,7 @@ fi
 # -----------------------------------------------------------------------------
 # Scenario 2: Invalid Keys Ignored
 # -----------------------------------------------------------------------------
-send "X" "9" " " Enter
+send "X" "9" " "
 sleep 0.4
 if cap | grep -q "P A W M O D O R O" && cap | grep -q "cozy focus - habits - notes" && overflow_check; then
     pass "Scenario 2 - Invalid keys ignored without screen corruption"
@@ -1135,6 +1135,7 @@ tmux send-keys -t "$TMUX_RM" "strace -f -tt -e trace=write -o '$RM_LOG' ./pawmod
 sleep 0.5
 
 RM_OK=0
+RM_WRITES=0
 if tmux capture-pane -t "$TMUX_RM" -p | grep -q "P A W M O D O R O"; then
     rm -f "$RM_LOG"
     sleep 2.0
@@ -1647,8 +1648,124 @@ else
     fail "Scenario 37 - G6 verification failed"
 fi
 
+# -----------------------------------------------------------------------------
+# Scenario 38: G7 Dashboard Redesign & Navigation Verification (Task G7)
+# -----------------------------------------------------------------------------
+echo "--- Scenario 38: G7 Dashboard Redesign & Navigation ---"
+G7_SUBDIR=$(mktemp -d /tmp/paw_g7_XXXXXX)
+TMUX_G7="paw_g7_$$"
+cp "$BIN" "$G7_SUBDIR/pawmodoro"
+G7_OK=1
 
+tmux new-session -d -s "$TMUX_G7" -x 80 -y 24 "cd \"$G7_SUBDIR\" && ./pawmodoro; echo EXIT=\$? > exit.txt"
+sleep 0.4
 
+# Wait for menu to appear up to 5 seconds
+for i in $(seq 1 25); do
+    if tmux capture-pane -t "$TMUX_G7" -p | grep -q "P A W M O D O R O"; then break; fi
+    sleep 0.2
+done
+
+if tmux capture-pane -t "$TMUX_G7" -p | grep -q "P A W M O D O R O"; then
+    CAP_DASH=$(tmux capture-pane -t "$TMUX_G7" -p)
+    # 1. Verify dashboard components present at 80x24 Compact tier
+    for item in "Start Focus" "Habits" "Journal" "Demo mode" "Settings" "Quit" "Tip:"; do
+        if ! echo "$CAP_DASH" | grep -q "$item"; then
+            echo "FAIL: Expected dashboard element '$item' missing at 80x24" >&2
+            G7_OK=0
+        fi
+    done
+
+    # 2. Test Down navigation wraparound
+    for step in 1 2 3 4 5 6; do
+        tmux send-keys -t "$TMUX_G7" Down
+        sleep 0.1
+    done
+
+    # 3. Test Up navigation wraparound (Start Focus -> Quit)
+    tmux send-keys -t "$TMUX_G7" Up
+    sleep 0.1
+    # Move back down to Start Focus
+    tmux send-keys -t "$TMUX_G7" Down
+    sleep 0.1
+
+    # 4. Test Demo Mode shortcut '4'
+    tmux send-keys -t "$TMUX_G7" "4"
+    sleep 0.2
+    CAP_DEMO=$(tmux capture-pane -t "$TMUX_G7" -p)
+    if ! echo "$CAP_DEMO" | grep -q "ON"; then
+        echo "FAIL: Demo mode toggle '4' did not switch to ON" >&2
+        G7_OK=0
+    fi
+    tmux send-keys -t "$TMUX_G7" "4"
+    sleep 0.2
+
+    # 5. Test Quick Journal direct shortcut 'J'
+    tmux send-keys -t "$TMUX_G7" "J"
+    sleep 0.3
+    CAP_JRNL=$(tmux capture-pane -t "$TMUX_G7" -p)
+    if ! echo "$CAP_JRNL" | grep -q "New entry"; then
+        echo "FAIL: Quick Journal prompt not opened by 'J'" >&2
+        G7_OK=0
+    else
+        # Enter note text and save
+        tmux send-keys -t "$TMUX_G7" "Dashboard Test Note" Enter
+        sleep 0.3
+        CAP_AFTER_J=$(tmux capture-pane -t "$TMUX_G7" -p)
+        if ! echo "$CAP_AFTER_J" | grep -q "Dashboard"; then
+            echo "FAIL: New entry not reflected in Recent Notes card" >&2
+            G7_OK=0
+        fi
+    fi
+
+    # 6. Test Enter key activates focused control
+    # Currently at Start Focus; press Down to move to Habits
+    tmux send-keys -t "$TMUX_G7" Down
+    sleep 0.1
+    tmux send-keys -t "$TMUX_G7" Enter
+    sleep 0.3
+    CAP_HABITS=$(tmux capture-pane -t "$TMUX_G7" -p)
+    if ! echo "$CAP_HABITS" | grep -q "HABIT TRACKER"; then
+        echo "FAIL: Enter key did not activate focused Habit Tracker" >&2
+        G7_OK=0
+    fi
+    # Return to menu with 'B'
+    tmux send-keys -t "$TMUX_G7" "B"
+    sleep 0.3
+
+    # 7. Test responsive resize to Standard (100x30)
+    tmux resize-window -t "$TMUX_G7" -x 100 -y 30
+    sleep 0.3
+    CAP_STD=$(tmux capture-pane -t "$TMUX_G7" -p)
+    if ! echo "$CAP_STD" | grep -q "Today's Progress"; then
+        echo "FAIL: Today's Progress missing at 100x30 Standard tier" >&2
+        G7_OK=0
+    fi
+
+    # 8. Test responsive resize to Grand (120x36)
+    tmux resize-window -t "$TMUX_G7" -x 120 -y 36
+    sleep 0.3
+    CAP_GRAND=$(tmux capture-pane -t "$TMUX_G7" -p)
+    if ! echo "$CAP_GRAND" | grep -q "P A W M O D O R O"; then
+        echo "FAIL: Title missing at 120x36 Grand tier" >&2
+        G7_OK=0
+    fi
+
+    # 9. Clean quit via 'Q'
+    tmux send-keys -t "$TMUX_G7" "Q"
+    sleep 0.3
+else
+    G7_OK=0
+fi
+
+tmux kill-session -t "$TMUX_G7" 2>/dev/null || true
+rm -rf "$G7_SUBDIR"
+
+if [ "$G7_OK" -eq 1 ]; then
+    pass "Scenario 38 - G7 Dashboard Redesign: Navigation, Shortcuts, Quick Note, Enter Activation, and Responsiveness"
+else
+    fail "Scenario 38 - G7 verification failed"
+fi
 # -----------------------------------------------------------------------------
 # Optional Extended Scenario: Full 4-Session Cycle (--full)
 # -----------------------------------------------------------------------------

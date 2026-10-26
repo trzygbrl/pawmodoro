@@ -95,6 +95,8 @@ _start:
 
     mov dword [state], STATE_MENU
     mov dword [demo_mode], 0
+    mov dword [dash_focus], 0
+    mov dword [dash_prev_focus], 0
     mov dword [menu_msg], 0
     mov dword [menu_msg_style], STATUS_INFO
     mov dword [need_redraw], 1
@@ -144,7 +146,16 @@ _start:
 .wait_for_input:
     ; Low-CPU sleep loop checking terminal dimensions, ticking animation, and polling input
     call time_sleep_100ms
-    call anim_tick              ; Advance animation and flush dirty partial regions (Task V7)
+    ; Advance animation and flush dirty partial regions (Task V7)
+    ; In STATE_MENU, anim_tick hardcodes 80x24 title coordinates (col 12, 14, 32)
+    ; so only invoke anim_tick in menu if layout_tier == TIER_COMPACT
+    cmp dword [state], STATE_MENU
+    jne .do_anim_tick
+    cmp dword [layout_tier], TIER_COMPACT
+    jne .skip_anim_tick
+.do_anim_tick:
+    call anim_tick
+.skip_anim_tick:
     call term_size_ok
     test eax, eax
     jz .main_resized            ; Terminal shrunk below 80x24: trigger redraw to enter ui_size_gate immediately
@@ -182,11 +193,31 @@ _start:
 ; State Handler: STATE_MENU Keys (FR-U2)
 ; -----------------------------------------------------------------------------
 .handle_menu_key:
-    ; Global exit: 'Q' or Ctrl+C
+    ; Global exit: 'Q', 'q', or Ctrl+C
     cmp eax, KEY_Q
+    je .handle_exit
+    cmp eax, 113                ; 'q'
     je .handle_exit
     cmp eax, KEY_CTRL_C
     je .handle_exit
+
+    ; Up / Down: Move sidebar focus (wrap 0..5) with dirty-region partial redraw
+    cmp eax, KEY_UP
+    je .menu_focus_up
+    cmp eax, KEY_DOWN
+    je .menu_focus_down
+
+    ; Enter: Activate focused sidebar control
+    cmp eax, KEY_ENTER
+    je .menu_activate_focus
+    cmp eax, 13
+    je .menu_activate_focus
+
+    ; 'J' / 'j' -> Open Quick Journal new-entry prompt directly
+    cmp eax, KEY_J
+    je .menu_to_quick_journal
+    cmp eax, 106                ; 'j'
+    je .menu_to_quick_journal
 
     ; '1' -> Enter Pomodoro Timer (calls timer_run per Task 5)
     cmp eax, KEY_1
@@ -225,6 +256,59 @@ _start:
     je .menu_to_layout_test
 
     ; Any other key is ignored: no redraw, no write!
+    jmp .main_loop
+
+.menu_focus_up:
+    mov eax, [dash_focus]
+    mov [dash_prev_focus], eax
+    dec eax
+    jns .focus_up_ok
+    mov eax, 5                  ; Wrap 0 -> 5
+.focus_up_ok:
+    mov [dash_focus], eax
+    mov ebx, eax                ; EBX = new_focus
+    mov eax, [dash_prev_focus]  ; EAX = prev_focus
+    call ui_draw_menu_focus_change
+    jmp .main_loop
+
+.menu_focus_down:
+    mov eax, [dash_focus]
+    mov [dash_prev_focus], eax
+    inc eax
+    cmp eax, 6
+    jb .focus_down_ok
+    xor eax, eax                ; Wrap 5 -> 0
+.focus_down_ok:
+    mov [dash_focus], eax
+    mov ebx, eax                ; EBX = new_focus
+    mov eax, [dash_prev_focus]  ; EAX = prev_focus
+    call ui_draw_menu_focus_change
+    jmp .main_loop
+
+.menu_activate_focus:
+    mov eax, [dash_focus]
+    cmp eax, 0
+    je .menu_to_timer
+    cmp eax, 1
+    je .menu_to_habits
+    cmp eax, 2
+    je .menu_to_journal
+    cmp eax, 3
+    je .menu_toggle_demo
+    cmp eax, 4
+    je .menu_to_settings
+    cmp eax, 5
+    je .handle_exit
+    jmp .main_loop
+
+.menu_to_quick_journal:
+    call anim_reset_effects
+    call journal_new_entry
+    cmp dword [state], STATE_QUIT
+    je .handle_exit
+    mov dword [state], STATE_MENU
+    call dashboard_refresh
+    mov dword [need_redraw], 1
     jmp .main_loop
 
 .menu_to_layout_test:
@@ -353,6 +437,9 @@ dashboard_refresh:
     mov [dash_pomodoros], eax
 
     call habits_sync_dashboard  ; Updates dash_habits_done and dash_habits_total
+
+    call journal_load_tail      ; Load newest entries for dashboard recent notes card
+    call journal_find_lines
 
     restore_regs
     ret

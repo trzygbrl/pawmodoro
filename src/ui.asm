@@ -510,12 +510,16 @@ ui_layout_update:
 
 ;=============================================================================
 ; Procedure: ui_draw_menu
-; Purpose:   Draws all outer borders and clears inner rows first, wipes remaining
-;            screen area below row 13 with ESC[J, then overlays cat art, bold
-;            titles, daily statistics dashboard, and menu options.
-; IN:        None (reads demo_mode, dash_pomodoros, dash_habits_done, dash_habits_total)
+; Purpose:   Draws responsive Pawmodoro Dashboard adhering to PRD_V3 and Task G7.
+;            Composes Header, Sidebar (6 buttons/toggles), Main Panel ("Today's
+;            Progress" with Pomodoro Stat Card, Habits Card with cat slider,
+;            Daily Tip card, Quick Note action, Recent Notes card), Grand-only
+;            ornaments (corner vines, stars, paws), and designated status/keybar
+;            footer line.
+; IN:        None (reads demo_mode, dash_pomodoros, dash_habits_done,
+;                  dash_habits_total, dash_focus, layout_tier, etc.)
 ; OUT:       Appends complete menu frame to out_buf
-; CLOBBERS:  None (preserves all)
+; CLOBBERS:  None (preserves all general-purpose registers and EFLAGS)
 ;=============================================================================
 ui_draw_menu:
     call ui_size_gate
@@ -523,259 +527,1199 @@ ui_draw_menu:
     save_regs
     push eax
 
-    ; Frame begins with cursor home via ui_goto(1, 1)
-    mov eax, UI_MENU_ROW_TOP
-    mov ebx, 1
-    call ui_goto
-
-    ; -------------------------------------------------------------------------
-    ; Phase 1: Draw All Borders and Cleared Rows First
-    ; -------------------------------------------------------------------------
-    ; Row 1: Top border
-    mov eax, UI_MENU_ROW_TOP
-    call ui_frame_hline
-
-    ; Rows 2..4: Header section (Cat & Title area)
-    mov eax, UI_MENU_ROW_TITLE
-    call ui_frame_row
-    mov eax, UI_MENU_ROW_TAGLINE
-    call ui_frame_row
-    mov eax, UI_MENU_ROW_CAT3
-    call ui_frame_row
-
-    ; Row 5: Separator border
-    mov eax, UI_MENU_ROW_SEP
-    call ui_frame_hline
-
-    ; Rows 6..12: Content section (Dashboard, Spacing, Menu Items)
-    mov eax, UI_MENU_ROW_DASH
-    call ui_frame_row
-    mov eax, UI_MENU_ROW_BLANK
-    call ui_frame_row
-    mov eax, UI_MENU_ROW_ITEM1
-    call ui_frame_row
-    mov eax, UI_MENU_ROW_ITEM2
-    call ui_frame_row
-    mov eax, UI_MENU_ROW_ITEM3
-    call ui_frame_row
-    mov eax, UI_MENU_ROW_ITEM4
-    call ui_frame_row
-    mov eax, UI_MENU_ROW_ITEM5
-    call ui_frame_row
-    mov eax, UI_MENU_ROW_ITEMQ
-    call ui_frame_row
-
-    ; Row 13: Status / message row
-    mov eax, UI_MENU_ROW_STATUS
-    call ui_frame_row
-
-    ; Row 14: Key help row
-    mov eax, UI_MENU_ROW_HELP
-    call ui_frame_row
-
-    ; Row 15: Bottom border
-    mov eax, UI_MENU_ROW_BOTTOM
-    call ui_frame_hline
-
-    ; Row 16: Move below frame and erase to end of screen (ESC[J)
-    mov eax, UI_MENU_ROW_BELOW
+    ; Position home and clear frame background with SLOT_BG
+    mov eax, 1
     mov ebx, 1
     call buf_goto
     mov al, SLOT_BG
-    call ui_bgcolor
-    mov esi, ansi_erase_eos
+    call gfx_set_bg
+    mov esi, ansi_clear
     call buf_str
     mov esi, ansi_reset
     call buf_str
 
-    ; -------------------------------------------------------------------------
-    ; Phase 2: Overlay Content (Cat Art, Titles, Dashboard, Menu Options)
-    ; -------------------------------------------------------------------------
-    ; 1. Cat art (Pose 0: Idle) at Row 2, Col 4
-    mov dword [cat_row], UI_MENU_ROW_TITLE
-    mov dword [cat_col], UI_MENU_COL_CAT
-    mov eax, CAT_POSE_IDLE
-    call ui_draw_cat
+    ; Draw all dashboard components in visual hierarchy order
+    call ui_draw_menu_header
+    call ui_draw_menu_sidebar
+    call ui_draw_menu_progress
+    call ui_draw_menu_grand_ornaments
+    call ui_draw_menu_footer
 
-    ; 2. Bold title "P A W M O D O R O" at Row 2, Col 14
-    mov eax, UI_MENU_ROW_TITLE
-    mov ebx, UI_MENU_COL_TITLE
-    call ui_goto
-    mov esi, ansi_bold
-    call buf_str
+    pop eax
+    restore_regs
+    ret
+
+;=============================================================================
+; Procedure: ui_draw_menu_header
+; Purpose:   Draws dashboard header region containing cat logo sprite on left,
+;            spaced gradient title "P A W M O D O R O ✦" with accent sparkle,
+;            tagline "cozy focus - habits - notes", deterministic greeting
+;            from ui_greeting_get, and sleeping cat sprite at end of greeting line.
+; IN:        None
+; OUT:       Appends header panel and inner elements to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_draw_menu_header:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    sub esp, 16                 ; [esp]=row, [esp+4]=col, [esp+8]=w, [esp+12]=h
+    mov eax, REGION_HEADER
+    call layout_rect
+    mov [esp], eax
+    mov [esp + 4], ebx
+    mov [esp + 8], ecx
+    mov [esp + 12], edx
+
+    ; 1. Draw outer header panel (no title tab)
+    mov esi, 0
+    mov edi, WDG_PANEL_FLAG_NONE
+    call wdg_panel
+
+    ; 2. Draw Cat Logo Sprite
+    mov esi, sprite_logo_cat    ; Grand 14x7
+    mov edx, 14                 ; Logo width in cells
+    cmp dword [layout_tier], TIER_GRAND
+    je .hdr_logo_draw
+    mov esi, sprite_logo_cat_std ; Standard 12x6
+    mov edx, 12
+    cmp dword [layout_tier], TIER_STANDARD
+    je .hdr_logo_draw
+    mov esi, sprite_logo_cat_compact ; Compact 8x4
+    mov edx, 8
+
+.hdr_logo_draw:
+    push edx                    ; [esp] = logo_w (stack vars at [esp+4..+16])
+    mov eax, 2                  ; Row 2 (inside top border)
+    mov ebx, [esp + 8]          ; col (frame_c0)
+    inc ebx                     ; col = frame_c0 + 1
+    cmp dword [layout_tier], TIER_COMPACT
+    je .hdr_col_set
+    inc ebx                     ; col = frame_c0 + 2
+.hdr_col_set:
+    push ebx
+    sub ebx, [ui_col0]          ; Frame-relative column
+    xor ecx, ecx                ; Frame 0
+    mov edx, SLOT_SURFACE       ; Fill slot
+    call sprite_draw
+    pop ebx                     ; Restore absolute col of logo
+    pop edx                     ; EDX = logo_w
+
+    ; 3. Text Column = logo_col + logo_w + 2
+    mov edi, ebx
+    add edi, edx
+    add edi, 2                  ; EDI = text_col (absolute)
+
+    ; 4. Spaced Title "P A W M O D O R O ✦" at Row 2, Col EDI
+    mov eax, 2
+    mov ebx, edi
+    call buf_goto
+    mov al, SLOT_SURFACE
+    call gfx_set_bg
     mov al, SLOT_TITLE
-    call ui_color
-    mov esi, menu_title
-    call buf_str
-    mov esi, ansi_reset
-    call buf_str
-
-    ; 3. Tagline "cozy focus - habits - notes" at Row 3, Col 14
-    mov eax, UI_MENU_ROW_TAGLINE
-    mov ebx, UI_MENU_COL_TITLE
-    call ui_goto
-    mov al, SLOT_ACCENT
-    call ui_color
-    mov esi, menu_tagline
-    call buf_str
-    mov esi, ansi_reset
-    call buf_str
-
-    ; 3b. Deterministic greeting at Row 4, Col 14
-    mov eax, UI_MENU_ROW_CAT3
-    mov ebx, UI_MENU_COL_TITLE
-    call ui_goto
-    mov al, SLOT_DIM
-    call ui_color
-    call ui_greeting_get
-    call buf_str
-    mov esi, ansi_reset
-    call buf_str
-
-    ; 4. Dashboard line at Row 6, Col 4: "Today: N pomodoros      Habits: D/T done"
-    mov eax, UI_MENU_ROW_DASH
-    mov ebx, UI_MENU_COL_CONTENT
-    call ui_goto
-
-    mov esi, dash_lbl_today
-    call buf_str
+    call gfx_set_fg
     mov esi, ansi_bold
     call buf_str
+    mov esi, menu_title         ; "P A W M O D O R O"
+    call buf_str
+    mov al, CHAR_SPACE
+    call buf_char
+
+    ; Sparkle in SLOT_ACCENT
     mov al, SLOT_ACCENT
-    call ui_color
+    call gfx_set_fg
+    cmp byte [setting_charset], 1
+    je .hdr_sparkle_asc
+    mov esi, dash_str_sparkle   ; "✦"
+    call buf_str
+    jmp .hdr_sparkle_done
+.hdr_sparkle_asc:
+    mov al, CHAR_ASTERISK       ; '*'
+    call buf_char
+.hdr_sparkle_done:
+    mov esi, ansi_reset
+    call buf_str
+
+    ; 5. Tagline at Row 3, Col EDI
+    mov eax, 3
+    mov ebx, edi
+    call buf_goto
+    mov al, SLOT_SURFACE
+    call gfx_set_bg
+    mov al, SLOT_ACCENT
+    call gfx_set_fg
+    mov esi, menu_tagline       ; "cozy focus - habits - notes"
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+
+    ; 6. Greeting at Row 4, Col EDI
+    mov eax, 4
+    mov ebx, edi
+    call buf_goto
+    mov al, SLOT_SURFACE
+    call gfx_set_bg
+    mov al, SLOT_DIM
+    call gfx_set_fg
+    call ui_greeting_get        ; ESI = greeting string
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+
+    ; 7. Sleeping Cat Sprite at end of greeting line (Grand & Standard only)
+    cmp dword [layout_tier], TIER_COMPACT
+    je .hdr_done
+
+    mov esi, sprite_sleeping_cat ; Grand 8x4
+    cmp dword [layout_tier], TIER_GRAND
+    je .hdr_sleep_draw
+    mov esi, sprite_sleeping_cat_std ; Standard 6x3
+
+.hdr_sleep_draw:
+    mov eax, 3                  ; Row 3
+    mov ebx, [esp + 4]          ; frame_c0
+    add ebx, [esp + 8]          ; + frame_w
+    sub ebx, 10                 ; - 10 cells from right
+    sub ebx, [ui_col0]          ; Frame-relative
+    xor ecx, ecx                ; Frame 0
+    mov edx, SLOT_SURFACE
+    call sprite_draw
+
+.hdr_done:
+    add esp, 16
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
+
+;=============================================================================
+; Procedure: ui_get_sidebar_btn_rect
+; Purpose:   Computes 1-based absolute terminal bounding rectangle for the
+;            specified sidebar button index (0..5) based on active layout tier.
+; IN:        EAX = Button index (0..5)
+; OUT:       EAX = Absolute terminal row
+;            EBX = Absolute terminal col
+;            ECX = Button width
+;            EDX = Button height
+; CLOBBERS:  EAX, EBX, ECX, EDX
+;=============================================================================
+ui_get_sidebar_btn_rect:
+    push esi
+    push edi
+    push ebp
+
+    push eax                    ; [esp] = button index (0..5)
+    mov eax, REGION_SIDEBAR
+    call layout_rect            ; EAX=mid_r0, EBX=frame_c0, ECX=sidebar_w, EDX=mid_h
+    mov esi, eax                ; ESI = mid_r0
+    mov edi, ebx                ; EDI = frame_c0
+    mov ebp, ecx                ; EBP = sidebar_w
+    pop eax                     ; EAX = button index (0..5)
+
+    lea ebx, [edi + 1]          ; EBX = frame_c0 + 1
+    lea ecx, [ebp - 2]          ; ECX = sidebar_w - 2
+
+    cmp dword [layout_tier], TIER_COMPACT
+    je .sbrect_cmp
+    cmp dword [layout_tier], TIER_STANDARD
+    je .sbrect_std
+
+    ; Grand tier: 3 rows high, 1 row spacing (row step = 4)
+    shl eax, 2                  ; EAX = i * 4
+    lea eax, [esi + 1 + eax]    ; EAX = mid_r0 + 1 + i*4
+    mov edx, 3
+    jmp .sbrect_done
+
+.sbrect_std:
+    ; Standard tier: 3 rows high, row step = 3
+    lea edx, [eax + eax*2]      ; EDX = i * 3
+    lea eax, [esi + 1 + edx]    ; EAX = mid_r0 + 1 + i*3
+    mov edx, 3
+    jmp .sbrect_done
+
+.sbrect_cmp:
+    ; Compact tier: 1 row high, row step = 2 (rows r0+1, r0+3, r0+5, r0+7, r0+9, r0+11)
+    shl eax, 1                  ; EAX = i * 2
+    lea eax, [esi + 1 + eax]    ; EAX = mid_r0 + 1 + i*2
+    mov edx, 1
+
+.sbrect_done:
+    pop ebp
+    pop edi
+    pop esi
+    ret
+
+;=============================================================================
+; Procedure: ui_draw_menu_sidebar_btn
+; Purpose:   Draws a single sidebar button (or toggle switch card for Demo Mode)
+;            at index (0..5) with requested focus state.
+; IN:        EAX = Button index (0..5)
+;            EBP = Focus state (WDG_STATE_NORMAL or WDG_STATE_FOCUSED)
+; OUT:       Appends button widget to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_draw_menu_sidebar_btn:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    sub esp, 20                 ; [esp]=row, [esp+4]=col, [esp+8]=w, [esp+12]=h, [esp+16]=idx
+    mov [esp + 16], eax         ; Save button index
+
+    call ui_get_sidebar_btn_rect ; Returns EAX=row, EBX=col, ECX=w, EDX=h
+    mov [esp], eax
+    mov [esp + 4], ebx
+    mov [esp + 8], ecx
+    mov [esp + 12], edx
+
+    mov eax, [esp + 16]         ; EAX = index (0..5)
+
+    ; Dispatch based on button index
+    cmp eax, 0
+    je .sbtn_timer
+    cmp eax, 1
+    je .sbtn_habits
+    cmp eax, 2
+    je .sbtn_journal
+    cmp eax, 3
+    je .sbtn_demo
+    cmp eax, 4
+    je .sbtn_settings
+    cmp eax, 5
+    je .sbtn_quit
+    jmp .sbtn_done
+
+.sbtn_timer:
+    mov esi, sprite_icon_timer
+    mov edi, dash_btn_timer_std
+    cmp dword [layout_tier], TIER_COMPACT
+    jne .sbtn_draw_btn
+    mov esi, 0
+    mov edi, dash_btn_timer_cmp
+    jmp .sbtn_draw_btn
+
+.sbtn_habits:
+    mov esi, sprite_icon_habits
+    mov edi, dash_btn_habits_std
+    cmp dword [layout_tier], TIER_COMPACT
+    jne .sbtn_draw_btn
+    mov esi, 0
+    mov edi, dash_btn_habits_cmp
+    jmp .sbtn_draw_btn
+
+.sbtn_journal:
+    mov esi, sprite_icon_journal
+    mov edi, dash_btn_journal_std
+    cmp dword [layout_tier], TIER_COMPACT
+    jne .sbtn_draw_btn
+    mov esi, 0
+    mov edi, dash_btn_journal_cmp
+    jmp .sbtn_draw_btn
+
+.sbtn_demo:
+    cmp dword [layout_tier], TIER_COMPACT
+    jne .sbtn_demo_toggle_card
+    mov esi, 0
+    mov edi, dash_btn_demo_cmp_off
+    cmp dword [demo_mode], 0
+    je .sbtn_draw_btn
+    mov edi, dash_btn_demo_cmp_on
+    jmp .sbtn_draw_btn
+
+.sbtn_demo_toggle_card:
+    mov eax, [esp]
+    mov ebx, [esp + 4]
+    mov ecx, [esp + 8]
+    mov edx, [esp + 12]
+    mov esi, dash_btn_demo_std
+    mov edi, [demo_mode]        ; State (0 or 1)
+    call wdg_toggle
+    jmp .sbtn_done
+
+.sbtn_settings:
+    mov esi, sprite_icon_settings
+    mov edi, dash_btn_settings_std
+    cmp dword [layout_tier], TIER_COMPACT
+    jne .sbtn_draw_btn
+    mov esi, 0
+    mov edi, dash_btn_settings_cmp
+    jmp .sbtn_draw_btn
+
+.sbtn_quit:
+    mov esi, sprite_icon_quit
+    mov edi, dash_btn_quit_std
+    cmp dword [layout_tier], TIER_COMPACT
+    jne .sbtn_draw_btn
+    mov esi, 0
+    mov edi, dash_btn_quit_cmp
+
+.sbtn_draw_btn:
+    mov eax, [esp]
+    mov ebx, [esp + 4]
+    mov ecx, [esp + 8]
+    mov edx, [esp + 12]
+    call wdg_button
+
+.sbtn_done:
+    add esp, 20
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
+
+;=============================================================================
+; Procedure: ui_draw_menu_sidebar
+; Purpose:   Draws the unified sidebar panel and all 6 navigation controls
+;            in normative order: 1) Start Focus Session, 2) Habit Tracker,
+;            3) Journal, 4) Demo Mode, 5) Settings, 6) Quit. Highlights the
+;            button at index [dash_focus].
+; IN:        None
+; OUT:       Appends sidebar panel and buttons to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_draw_menu_sidebar:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    ; 1. Draw outer sidebar panel
+    mov eax, REGION_SIDEBAR
+    call layout_rect
+    mov esi, 0
+    mov edi, WDG_PANEL_FLAG_NONE
+    call wdg_panel
+
+    ; 2. Draw all 6 buttons
+    xor edi, edi                ; EDI = button index (0..5)
+.sb_loop:
+    mov eax, edi
+    mov ebp, WDG_STATE_NORMAL
+    cmp edi, [dash_focus]
+    jne .sb_state_ok
+    mov ebp, WDG_STATE_FOCUSED
+.sb_state_ok:
+    call ui_draw_menu_sidebar_btn
+    inc edi
+    cmp edi, 6
+    jb .sb_loop
+
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
+
+;=============================================================================
+; Procedure: ui_draw_menu_focus_change
+; Purpose:   Minimal dirty-region partial redraw routine invoked when sidebar
+;            focus moves via Up / Down navigation. Redraws only the previously
+;            focused and newly focused buttons and flushes the output buffer
+;            with a single sys_write.
+; IN:        EAX = Previous focus button index (0..5)
+;            EBX = New focus button index (0..5)
+; OUT:       Appends updated buttons to out_buf and flushes via buf_flush
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_draw_menu_focus_change:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    push ebx                    ; [esp] = new_focus
+    ; Redraw previous focus button in NORMAL state
+    mov ebp, WDG_STATE_NORMAL
+    call ui_draw_menu_sidebar_btn
+
+    ; Redraw new focus button in FOCUSED state
+    pop eax                     ; EAX = new_focus
+    mov ebp, WDG_STATE_FOCUSED
+    call ui_draw_menu_sidebar_btn
+
+    ; Flush dirty partial redraw with a single sys_write
+    call buf_flush
+
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
+
+;=============================================================================
+; Procedure: ui_draw_menu_pomo_card
+; Purpose:   Draws the Pomodoro statistics card containing today's completed
+;            count ("Today: N pomodoros") and the tomato-cat mascot sprite.
+;            Chooses mascot pose: sleeping if night, happy if count >= 1, idle otherwise.
+; IN:        None
+; OUT:       Appends stat card to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_draw_menu_pomo_card:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    sub esp, 16                 ; [esp]=row, [esp+4]=col, [esp+8]=w, [esp+12]=h
+    mov eax, REGION_CARD_POMO
+    call layout_rect
+    mov [esp], eax
+    mov [esp + 4], ebx
+    mov [esp + 8], ecx
+    mov [esp + 12], edx
+
+    ; Draw card panel with tab
+    mov esi, dash_title_pomo
+    mov edi, WDG_PANEL_FLAG_TAB
+    call wdg_panel
+
+    ; Stat text at row + 1, col + 2: "Today: N pomodoros"
+    mov eax, [esp]
+    inc eax
+    mov ebx, [esp + 4]
+    add ebx, 2
+    call buf_goto
+    mov al, SLOT_SURFACE
+    call gfx_set_bg
+    mov al, SLOT_TEXT
+    call gfx_set_fg
+    mov esi, dash_lbl_today     ; "Today: "
+    call buf_str
+    mov al, SLOT_ACCENT
+    call gfx_set_fg
+    mov esi, ansi_bold
+    call buf_str
     mov eax, [dash_pomodoros]
     call buf_u32
     mov esi, ansi_reset
     call buf_str
-
-    mov esi, dash_lbl_pomos
+    mov al, SLOT_SURFACE
+    call gfx_set_bg
+    mov al, SLOT_TEXT
+    call gfx_set_fg
+    mov esi, dash_lbl_pomo_count ; " pomodoros"
     call buf_str
-    mov esi, ansi_bold
+
+    ; Choose tomato mascot pose
+    ; Priority:
+    ; 1. Night period (hour < 6 || hour >= 21) -> Sleeping pose (frame 3)
+    ; 2. [dash_pomodoros] >= 1 -> Happy pose (frame 2)
+    ; 3. Else -> Idle pose (frame 0)
+    call time_local             ; EAX = local seconds
+    xor edx, edx
+    mov ecx, SECONDS_PER_DAY
+    div ecx                     ; EDX = seconds into today
+    mov eax, edx
+    xor edx, edx
+    mov ecx, 3600
+    div ecx                     ; EAX = hour (0..23)
+    cmp eax, 6
+    jb .mascot_sleeping
+    cmp eax, 21
+    jae .mascot_sleeping
+    cmp dword [dash_pomodoros], 0
+    ja .mascot_happy
+    xor ecx, ecx                ; Frame 0: Idle
+    jmp .mascot_pose_ok
+
+.mascot_sleeping:
+    mov ecx, 3                  ; Frame 3: Sleeping
+    jmp .mascot_pose_ok
+
+.mascot_happy:
+    mov ecx, 2                  ; Frame 2: Happy
+
+.mascot_pose_ok:
+    push ecx                    ; [esp] = frame index
+
+    ; Determine sprite & dimensions by tier
+    cmp dword [layout_tier], TIER_GRAND
+    je .pomo_grand
+    cmp dword [layout_tier], TIER_STANDARD
+    je .pomo_std
+
+    ; Compact: sprite_tomato_mascot_compact (6x3 cells)
+    mov esi, sprite_tomato_mascot_compact
+    mov eax, [esp + 4]          ; card_row
+    add eax, 2                  ; Row = card_row + 2
+    mov ebx, [esp + 8]          ; card_col
+    mov edx, [esp + 12]         ; card_w
+    sub edx, 6                  ; Available spare cols
+    shr edx, 1                  ; Center offset
+    add ebx, edx                ; Centered col
+    jmp .pomo_draw_sprite
+
+.pomo_std:
+    ; Standard: sprite_tomato_mascot_std (10x5 cells)
+    mov esi, sprite_tomato_mascot_std
+    mov eax, [esp + 4]          ; card_row
+    add eax, 3                  ; Row = card_row + 3
+    mov ebx, [esp + 8]          ; card_col
+    mov edx, [esp + 12]         ; card_w
+    sub edx, 10
+    shr edx, 1
+    add ebx, edx
+    jmp .pomo_draw_sprite
+
+.pomo_grand:
+    ; Grand: sprite_tomato_mascot (14x7 cells)
+    mov esi, sprite_tomato_mascot
+    mov eax, [esp + 4]          ; card_row
+    add eax, 4                  ; Row = card_row + 4
+    mov ebx, [esp + 8]          ; card_col
+    mov edx, [esp + 12]         ; card_w
+    sub edx, 14
+    shr edx, 1
+    add ebx, edx
+
+.pomo_draw_sprite:
+    sub ebx, [ui_col0]          ; Frame-relative column
+    pop ecx                     ; ECX = frame index
+    mov edx, SLOT_SURFACE
+    call sprite_draw
+
+    add esp, 16
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
+
+;=============================================================================
+; Procedure: ui_draw_menu_habits_card
+; Purpose:   Draws the Habits card showing today's progress "Habits: D/T done"
+;            and the cat-head progress bar (wdg_progress_cat), or the friendly
+;            empty state "No habits yet" with the plus icon.
+; IN:        None
+; OUT:       Appends habits card to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_draw_menu_habits_card:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    sub esp, 16                 ; [esp]=row, [esp+4]=col, [esp+8]=w, [esp+12]=h
+    mov eax, REGION_CARD_HABITS
+    call layout_rect
+    mov [esp], eax
+    mov [esp + 4], ebx
+    mov [esp + 8], ecx
+    mov [esp + 12], edx
+
+    ; Draw card panel with tab
+    mov esi, dash_title_habits
+    mov edi, WDG_PANEL_FLAG_TAB
+    call wdg_panel
+
+    ; Row 1: "Habits: D/T done"
+    mov eax, [esp]
+    inc eax
+    mov ebx, [esp + 4]
+    add ebx, 2
+    call buf_goto
+    mov al, SLOT_SURFACE
+    call gfx_set_bg
+    mov al, SLOT_TEXT
+    call gfx_set_fg
+    mov esi, dash_lbl_habits_prefix ; "Habits: "
     call buf_str
     mov al, SLOT_ACCENT
-    call ui_color
+    call gfx_set_fg
+    mov esi, ansi_bold
+    call buf_str
     mov eax, [dash_habits_done]
     call buf_u32
-    mov esi, ansi_reset
-    call buf_str
-
     mov al, CHAR_SLASH
     call buf_char
-
-    mov esi, ansi_bold
-    call buf_str
-    mov al, SLOT_ACCENT
-    call ui_color
     mov eax, [dash_habits_total]
     call buf_u32
     mov esi, ansi_reset
     call buf_str
-
-    mov esi, dash_lbl_done
+    mov al, SLOT_SURFACE
+    call gfx_set_bg
+    mov al, SLOT_TEXT
+    call gfx_set_fg
+    mov esi, dash_lbl_done_suffix ; " done"
     call buf_str
 
-    ; 4b. Deterministic daily cozy tip at Row 7, Col 4
-    mov eax, UI_MENU_ROW_BLANK
-    mov ebx, UI_MENU_COL_CONTENT
-    call ui_goto
+    ; Check if habits exist
+    mov eax, [dash_habits_total]
+    test eax, eax
+    jz .habits_empty
+
+    ; Habits exist: draw cat-head progress bar
+    mov eax, [esp]
+    add eax, 2                  ; Row = card_row + 2
+    mov ebx, [esp + 4]
+    add ebx, 2                  ; Col = card_col + 2
+    mov ecx, [esp + 8]
+    sub ecx, 4                  ; Width = card_w - 4
+    mov edx, 2                  ; Height = 2
+    mov esi, [dash_habits_done]
+    mov edi, [dash_habits_total]
+    call wdg_progress_cat
+    jmp .habits_card_done
+
+.habits_empty:
+    ; Friendly empty state: "No habits yet" + plus icon
+    mov eax, [esp]
+    add eax, 2
+    mov ebx, [esp + 4]
+    add ebx, 2
+    mov ecx, [esp + 8]
+    sub ecx, 10
+    mov esi, dash_no_habits     ; "No habits yet"
+    mov dl, SLOT_DIM
+    mov dh, SLOT_SURFACE
+    call wdg_clip_text
+
+    ; Draw plus icon near right of card
+    mov eax, [esp]
+    add eax, 2
+    mov ebx, [esp + 4]
+    add ebx, [esp + 8]
+    sub ebx, 6                  ; Col = card_col + card_w - 6
+    cmp byte [setting_charset], 1
+    je .habits_plus_asc
+    sub ebx, [ui_col0]          ; Frame-relative
+    mov esi, sprite_icon_plus
+    xor ecx, ecx
+    mov edx, SLOT_SURFACE
+    call sprite_draw
+    jmp .habits_card_done
+
+.habits_plus_asc:
+    call buf_goto
+    mov al, SLOT_SURFACE
+    call gfx_set_bg
     mov al, SLOT_ACCENT
-    call ui_color
-    mov eax, GLYPH_SPARKLE
-    call ui_glyph_str
+    call gfx_set_fg
+    mov al, CHAR_LBRACKET
+    call buf_char
+    mov al, CHAR_PLUS
+    call buf_char
+    mov al, CHAR_RBRACKET
+    call buf_char
+
+.habits_card_done:
+    add esp, 16
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
+
+;=============================================================================
+; Procedure: ui_draw_menu_tip_card
+; Purpose:   Draws the Daily Tip card obtaining deterministic text from ui_tip_get.
+; IN:        None
+; OUT:       Appends tip card to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_draw_menu_tip_card:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    mov eax, REGION_CARD_TIP
+    call layout_rect            ; EAX=row, EBX=col, ECX=w, EDX=h
+    call ui_tip_get             ; ESI = deterministic cozy tip
+    call wdg_tip_card
+
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
+
+;=============================================================================
+; Procedure: ui_draw_menu_journal_btn
+; Purpose:   Draws the Quick Note action button "[J] Quick Note".
+; IN:        None
+; OUT:       Appends button to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_draw_menu_journal_btn:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    mov eax, REGION_CARD_JOURNAL_BTN
+    call layout_rect            ; EAX=row, EBX=col, ECX=w, EDX=h
+    mov esi, sprite_icon_journal
+    mov edi, dash_btn_quick_note ; "[J] Quick Note"
+    mov ebp, WDG_STATE_NORMAL
+    call wdg_button
+
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
+
+;=============================================================================
+; Procedure: ui_draw_menu_recent_notes
+; Purpose:   Draws the Recent Notes card showing up to the last 3 journal entries
+;            in reverse chronological order with bullet, MM-DD HH:MM timestamp,
+;            and safely clipped body text. Displays friendly empty state if no
+;            entries exist.
+; IN:        None
+; OUT:       Appends recent notes card to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_draw_menu_recent_notes:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    sub esp, 32                 ; Local stack frame
+    mov eax, REGION_CARD_JOURNAL
+    call layout_rect
+    mov [esp + 0], eax          ; card_row
+    mov [esp + 4], ebx          ; card_col
+    mov [esp + 8], ecx          ; card_w
+    mov [esp + 12], edx         ; card_h
+
+    ; Draw card panel with tab
+    mov esi, dash_title_notes
+    mov edi, WDG_PANEL_FLAG_TAB
+    call wdg_panel
+
+    ; Check if any journal entries loaded
+    mov ecx, [jrnl_line_count]
+    test ecx, ecx
+    jz .notes_empty
+
+    ; Determine count to show (min(jrnl_line_count, 3))
+    cmp ecx, 3
+    jbe .notes_count_ok
+    mov ecx, 3
+.notes_count_ok:
+    mov [esp + 16], ecx         ; num_entries
+
+    ; Vertical spacing: if card_h >= 7 use step=2, else step=1
+    mov edx, 1
+    cmp dword [esp + 12], 7     ; card_h
+    jb .notes_step_set
+    mov edx, 2
+.notes_step_set:
+    mov [esp + 20], edx         ; step
+
+    xor ebp, ebp                ; EBP = loop index k (0..num_entries - 1)
+.notes_loop:
+    mov [esp + 24], ebp         ; Save k
+
+    ; Calculate entry index: idx = [jrnl_line_count] - 1 - k
+    mov eax, [jrnl_line_count]
+    dec eax
+    sub eax, ebp
+    mov [esp + 28], eax         ; Save idx
+    shl eax, 4                  ; EAX = idx * 16
+
+    ; Calculate row for entry k: card_row + 1 + k * step
+    mov eax, ebp
+    imul eax, [esp + 20]        ; k * step
+    add eax, [esp + 0]          ; + card_row
+    inc eax                     ; + 1
+    mov ebx, [esp + 4]          ; card_col
+    add ebx, 2                  ; + 2
+
+    ; 1. Draw Paw Bullet at (row, col)
+    call buf_goto
+    mov al, SLOT_SURFACE
+    call gfx_set_bg
+    mov al, SLOT_ACCENT
+    call gfx_set_fg
+    cmp byte [setting_charset], 1
+    je .notes_bullet_asc
+    mov esi, glyph_utf8_sparkle
     call buf_str
+    jmp .notes_bullet_done
+.notes_bullet_asc:
+    mov al, CHAR_ASTERISK
+    call buf_char
+.notes_bullet_done:
     mov al, CHAR_SPACE
     call buf_char
+
+    ; 2. Draw Short Timestamp MM-DD HH:MM (11 chars)
+    ; In jrnl_buf, format is "YYYY-MM-DD HH:MM | ..."
+    ; Bytes 5..15 are "MM-DD HH:MM"
+    mov eax, [esp + 28]         ; idx
+    shl eax, 4
+    mov esi, [jrnl_entries + eax]     ; start_ptr
+    mov ecx, [jrnl_entries + eax + 4] ; text_len
+
+    cmp ecx, 16
+    jb .notes_ts_done           ; Short line: skip timestamp
+
+    add esi, 5                  ; ESI points to MM-DD HH:MM
     mov al, SLOT_DIM
-    call ui_color
-    call ui_tip_get
-    call buf_str
-    mov esi, ansi_reset
-    call buf_str
+    call gfx_set_fg
+    mov ecx, 11
+.notes_ts_loop:
+    lodsb
+    call buf_char
+    dec ecx
+    jnz .notes_ts_loop
 
-    ; 5. Menu options
-    ; [1] Start focus session
-    mov eax, UI_MENU_ROW_ITEM1
-    mov ebx, UI_MENU_COL_CONTENT
-    mov esi, menu_item_1
-    call ui_text_at
-
-    ; [2] Habit tracker
-    mov eax, UI_MENU_ROW_ITEM2
-    mov ebx, UI_MENU_COL_CONTENT
-    mov esi, menu_item_2
-    call ui_text_at
-
-    ; [3] Journal
-    mov eax, UI_MENU_ROW_ITEM3
-    mov ebx, UI_MENU_COL_CONTENT
-    mov esi, menu_item_3
-    call ui_text_at
-
-    ; [4] Demo mode: OFF / ON
-    mov eax, UI_MENU_ROW_ITEM4
-    mov ebx, UI_MENU_COL_CONTENT
-    call ui_goto
-    mov esi, menu_item_4_prefix
-    call buf_str
-
-    cmp dword [demo_mode], 0
-    jne .menu_demo_active
-    mov al, SLOT_DIM
-    call ui_color
-    mov esi, menu_demo_off
-    call buf_str
-    mov esi, ansi_reset
-    call buf_str
-    jmp .menu_item_5
-
-.menu_demo_active:
-    mov esi, ansi_bold
-    call buf_str
-    mov al, SLOT_OK
-    call ui_color
-    mov esi, menu_demo_on
-    call buf_str
-    mov esi, ansi_reset
-    call buf_str
     mov al, CHAR_SPACE
     call buf_char
-    mov al, CHAR_SPACE
+
+.notes_ts_done:
+    ; 3. Draw Entry Text
+    mov eax, [esp + 28]         ; idx
+    shl eax, 4
+    mov esi, [jrnl_entries + eax]     ; start_ptr
+    mov ecx, [jrnl_entries + eax + 4] ; text_len
+
+    cmp ecx, 19
+    jbe .notes_text_done        ; Short line: skip text
+
+    add esi, 19                 ; Advance past "YYYY-MM-DD HH:MM | "
+    sub ecx, 19                 ; Remaining length in entry
+    jle .notes_text_done
+
+    ; Strip trailing newlines/carriage returns
+.strip_end:
+    test ecx, ecx
+    jz .notes_text_done
+    mov al, [esi + ecx - 1]
+    cmp al, 10
+    je .dec_len
+    cmp al, 13
+    je .dec_len
+    jmp .stripped_ok
+.dec_len:
+    dec ecx
+    jmp .strip_end
+
+.stripped_ok:
+    test ecx, ecx
+    jz .notes_text_done
+
+    ; Budget = card_w - 18
+    mov edx, [esp + 8]          ; card_w
+    sub edx, 18
+    jle .notes_text_done
+
+    ; Position cursor for text: row = card_row + 1 + k * step, col = card_col + 16
+    mov eax, [esp + 24]         ; k
+    imul eax, [esp + 20]        ; k * step
+    add eax, [esp + 0]          ; + card_row
+    inc eax
+    mov ebx, [esp + 4]          ; card_col
+    add ebx, 16                 ; 2 padding + 2 bullet + 11 ts + 1 space
+    call buf_goto
+
+    mov al, SLOT_TEXT
+    call gfx_set_fg
+
+    cmp ecx, edx
+    jbe .emit_all_text
+    ; Truncate with '~'
+    mov ecx, edx
+    dec ecx                     ; Leave 1 cell for '~'
+.emit_clip_loop:
+    test ecx, ecx
+    jz .emit_clip_mark
+    lodsb
     call buf_char
-    mov al, SLOT_WARN
-    call ui_color
-    mov esi, dash_badge_demo
-    call buf_str
-    mov esi, ansi_reset
-    call buf_str
+    dec ecx
+    jmp .emit_clip_loop
+.emit_clip_mark:
+    mov al, UI_CLIP_MARKER      ; '~'
+    call buf_char
+    jmp .notes_text_done
 
-.menu_item_5:
-    ; [5] Settings
-    mov eax, UI_MENU_ROW_ITEM5
-    mov ebx, UI_MENU_COL_CONTENT
-    mov esi, menu_item_5
-    call ui_text_at
+.emit_all_text:
+.emit_full_loop:
+    test ecx, ecx
+    jz .notes_text_done
+    lodsb
+    call buf_char
+    dec ecx
+    jmp .emit_full_loop
 
-.menu_item_quit:
-    ; [Q] Quit
-    mov eax, UI_MENU_ROW_ITEMQ
-    mov ebx, UI_MENU_COL_CONTENT
-    mov esi, menu_item_q
-    call ui_text_at
+.notes_text_done:
+    mov ebp, [esp + 24]         ; Restore k
+    inc ebp
+    cmp ebp, [esp + 16]         ; Compare with num_entries
+    jb .notes_loop
 
-    ; 6. Status message at Row 13, Col 4
-    mov eax, UI_MENU_ROW_STATUS
+    jmp .notes_exit
+
+.notes_empty:
+    ; Friendly empty state
+    mov eax, [esp + 0]
+    add eax, 2
+    mov ebx, [esp + 4]
+    add ebx, 2
+    mov ecx, [esp + 8]
+    sub ecx, 4
+    mov esi, dash_no_notes
+    mov dl, SLOT_DIM
+    mov dh, SLOT_SURFACE
+    call wdg_clip_text
+
+.notes_exit:
+    add esp, 32
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
+
+;=============================================================================
+; Procedure: ui_draw_menu_progress
+; Purpose:   Draws the "Today's Progress" dashboard region and all child cards:
+;            Pomodoro Stat Card, Habits Card, Daily Tip Card, Quick Note Action,
+;            and Recent Notes Card.
+; IN:        None
+; OUT:       Appends all cards to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_draw_menu_progress:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    call ui_draw_menu_pomo_card
+    call ui_draw_menu_habits_card
+    call ui_draw_menu_tip_card
+    call ui_draw_menu_journal_btn
+    call ui_draw_menu_recent_notes
+
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
+
+;=============================================================================
+; Procedure: ui_draw_menu_grand_ornaments
+; Purpose:   Renders Grand-tier decorative corner vines, stars, and paws around
+;            the cards when layout_tier is TIER_GRAND. Guarantees no clipping
+;            or buffer overflow.
+; IN:        None
+; OUT:       Appends ornaments to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_draw_menu_grand_ornaments:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    cmp dword [layout_tier], TIER_GRAND
+    jne .orn_done
+
+    ; In Grand tier:
+    ; Corner vines around Recent Notes card
+    mov eax, REGION_CARD_JOURNAL
+    call layout_rect            ; EAX=row, EBX=col, ECX=w, EDX=h
+    push eax
+    push ebx
+    push ecx
+    push edx
+
+    ; Bottom-right corner vine:
+    ; row = journal_row + journal_h - 4, col = journal_col + journal_w - 9
+    mov eax, [esp + 12]         ; journal_row
+    add eax, [esp]              ; + journal_h
+    sub eax, 4
+    mov ebx, [esp + 8]          ; journal_col
+    add ebx, [esp + 4]          ; + journal_w
+    sub ebx, 9
+    sub ebx, [ui_col0]
+    mov esi, sprite_vine_corner_br
+    xor ecx, ecx
+    mov edx, SLOT_SURFACE
+    call sprite_draw
+
+    ; Top-right scattered star (inside card right margin, row 2)
+    mov eax, [esp + 12]         ; journal_row
+    add eax, 2
+    mov ebx, [esp + 8]          ; journal_col
+    add ebx, [esp + 4]          ; + journal_w
+    sub ebx, 4
+    sub ebx, [ui_col0]
+    mov esi, sprite_scattered_star
+    xor ecx, ecx
+    mov edx, SLOT_SURFACE
+    call sprite_draw
+
+    ; Bottom-left scattered paw (inside card left margin, bottom line)
+    mov eax, [esp + 12]         ; journal_row
+    add eax, [esp]              ; + journal_h
+    sub eax, 2
+    mov ebx, [esp + 8]          ; journal_col
+    add ebx, 2
+    sub ebx, [ui_col0]
+    mov esi, sprite_scattered_paw
+    xor ecx, ecx
+    mov edx, SLOT_SURFACE
+    call sprite_draw
+
+    add esp, 16
+
+.orn_done:
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
+
+;=============================================================================
+; Procedure: ui_draw_menu_footer
+; Purpose:   Draws designated bottom footer line: either active status message
+;            toast if [menu_msg] != 0, or keybar hints table via wdg_keybar.
+; IN:        None
+; OUT:       Appends footer line to out_buf
+; CLOBBERS:  None (preserves all)
+;=============================================================================
+ui_draw_menu_footer:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    ; Check if active status toast message
+    cmp dword [menu_msg], 0
+    jz .footer_keybar
+
+    ; Draw status message toast
+    mov eax, [ui_h]
+    dec eax
     mov ebx, [menu_msg_style]
     mov esi, [menu_msg]
     call ui_draw_status
+    jmp .footer_done
 
-    ; 7. Footer key help prompt at Row 14, Col 4
-    mov eax, UI_MENU_ROW_HELP
-    mov ebx, UI_MENU_COL_HELP
-    mov esi, menu_help
-    call ui_text_at
+.footer_keybar:
+    ; Draw keybar hints table
+    mov eax, [ui_h]
+    dec eax
+    mov ebx, [ui_col0]
+    inc ebx
+    mov ecx, [ui_w]
+    mov edx, 1
+    mov esi, menu_keybar_hints
+    call wdg_keybar
 
+.footer_done:
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
     pop eax
-    restore_regs
+    popf
     ret
 
 ;=============================================================================

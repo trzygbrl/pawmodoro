@@ -543,35 +543,32 @@ wdg_button:
     ; Determine colors and indicator based on state
     mov dl, SLOT_TEXT           ; Default text FG
     mov dh, SLOT_SURFACE        ; Default BG
+    mov ch, SLOT_BORDER         ; Default border slot
     cmp ebp, WDG_STATE_FOCUSED
     je .btn_focused
     cmp ebp, WDG_STATE_PRESSED
     je .btn_pressed
-
-    ; --- Normal State ---
-    mov eax, [wdg_b_row]
-    mov ebx, [wdg_b_col]
-    mov ecx, [wdg_b_w]
-    call buf_goto
-    mov al, dh
-    call gfx_set_bg
-    mov al, CHAR_SPACE
-    call buf_repeat
-
-    mov eax, [wdg_b_row]
-    mov ebx, [wdg_b_col]
-    mov ecx, [wdg_b_w]
-    call buf_goto
-    mov al, CHAR_SPACE
-    call buf_char
-    inc ebx
-    dec ecx
-    jmp .btn_draw_icon_label
+    jmp .btn_colors_set
 
 .btn_focused:
-    ; --- Focused State: Highlight Fill + Inverted Text + Visible Marker '>' ---
     mov dl, SLOT_TEXT_INV
     mov dh, SLOT_HIGHLIGHT
+    mov ch, SLOT_BORDER_FOCUS
+    jmp .btn_colors_set
+
+.btn_pressed:
+    mov dl, SLOT_ACCENT
+    mov dh, SLOT_SURFACE
+    mov ch, SLOT_ACCENT
+
+.btn_colors_set:
+    ; Check if 3-row bordered pill button (height >= 3)
+    cmp dword [wdg_b_h], 3
+    jge .btn_draw_3row
+
+    ; -------------------------------------------------------------------------
+    ; Single-Row Compact Button (height < 3)
+    ; -------------------------------------------------------------------------
     mov eax, [wdg_b_row]
     mov ebx, [wdg_b_col]
     mov ecx, [wdg_b_w]
@@ -587,32 +584,195 @@ wdg_button:
     call buf_goto
     mov al, dl
     call gfx_set_fg
-    mov al, '>'                 ; '>' non-color selection marker
+    cmp ebp, WDG_STATE_FOCUSED
+    jne .b1_check_pressed
+    mov al, '>'                 ; Focused marker
     call buf_char
     inc ebx
     dec ecx
     jmp .btn_draw_icon_label
 
-.btn_pressed:
-    ; --- Pressed State: Accent brackets '[' ... ']' ---
-    mov dl, SLOT_ACCENT
-    mov dh, SLOT_SURFACE
+.b1_check_pressed:
+    cmp ebp, WDG_STATE_PRESSED
+    jne .b1_normal
+    mov al, CHAR_LBRACKET       ; '['
+    call buf_char
+    inc ebx
+    dec ecx
+    jmp .btn_draw_icon_label
+
+.b1_normal:
+    mov al, CHAR_SPACE
+    call buf_char
+    inc ebx
+    dec ecx
+    jmp .btn_draw_icon_label
+
+    ; -------------------------------------------------------------------------
+    ; 3-Row Bordered Pill Button (height >= 3)
+    ; -------------------------------------------------------------------------
+.btn_draw_3row:
+    ; Row 0: Top border
     mov eax, [wdg_b_row]
     mov ebx, [wdg_b_col]
-    mov ecx, [wdg_b_w]
     call buf_goto
+    mov al, dh
+    call gfx_set_bg
+    mov al, ch                  ; Border slot
+    call gfx_set_fg
+
+    cmp byte [setting_charset], 1
+    je .b3_top_ascii
+    mov esi, glyph_utf8_corner_tl ; ╭
+    call buf_str
+    mov ecx, [wdg_b_w]
+    sub ecx, 2
+    jle .b3_top_r
+.b3_top_dash:
+    mov esi, glyph_utf8_hline  ; ─
+    call buf_str
+    dec ecx
+    jnz .b3_top_dash
+.b3_top_r:
+    mov esi, glyph_utf8_corner_tr ; ╮
+    call buf_str
+    jmp .b3_draw_mid
+
+.b3_top_ascii:
+    mov al, CHAR_PLUS
+    call buf_char
+    mov ecx, [wdg_b_w]
+    sub ecx, 2
+    jle .b3_top_r_asc
+    mov al, CHAR_MINUS
+    call buf_repeat
+.b3_top_r_asc:
+    mov al, CHAR_PLUS
+    call buf_char
+
+.b3_draw_mid:
+    ; Row 1: Middle content row
+    mov eax, [wdg_b_row]
+    inc eax
+    mov ebx, [wdg_b_col]
+    call buf_goto
+    mov al, dh
+    call gfx_set_bg
+    mov al, ch                  ; Border slot
+    call gfx_set_fg
+
+    cmp byte [setting_charset], 1
+    je .b3_mid_l_asc
+    mov esi, glyph_utf8_vline  ; │
+    call buf_str
+    jmp .b3_mid_content
+.b3_mid_l_asc:
+    mov al, CHAR_PIPE
+    call buf_char
+
+.b3_mid_content:
+    ; Clear middle interior with dh background spaces
+    mov eax, [wdg_b_row]
+    inc eax
+    mov ebx, [wdg_b_col]
+    inc ebx
+    call buf_goto
+    mov ecx, [wdg_b_w]
+    sub ecx, 2
     mov al, dh
     call gfx_set_bg
     mov al, CHAR_SPACE
     call buf_repeat
 
+    ; Right border of middle row
     mov eax, [wdg_b_row]
+    inc eax
     mov ebx, [wdg_b_col]
+    add ebx, [wdg_b_w]
+    dec ebx
+    call buf_goto
+    mov al, ch                  ; Border slot
+    call gfx_set_fg
+    cmp byte [setting_charset], 1
+    je .b3_mid_r_asc
+    mov esi, glyph_utf8_vline
+    call buf_str
+    jmp .b3_draw_bot
+.b3_mid_r_asc:
+    mov al, CHAR_PIPE
+    call buf_char
+
+.b3_draw_bot:
+    ; Row 2: Bottom border
+    mov eax, [wdg_b_row]
+    add eax, 2
+    mov ebx, [wdg_b_col]
+    call buf_goto
+    mov al, dh
+    call gfx_set_bg
+    mov al, ch                  ; Border slot
+    call gfx_set_fg
+
+    cmp byte [setting_charset], 1
+    je .b3_bot_ascii
+    mov esi, glyph_utf8_corner_bl ; ╰
+    call buf_str
     mov ecx, [wdg_b_w]
+    sub ecx, 2
+    jle .b3_bot_r
+.b3_bot_dash:
+    mov esi, glyph_utf8_hline  ; ─
+    call buf_str
+    dec ecx
+    jnz .b3_bot_dash
+.b3_bot_r:
+    mov esi, glyph_utf8_corner_br ; ╯
+    call buf_str
+    jmp .b3_emit_inner
+
+.b3_bot_ascii:
+    mov al, CHAR_PLUS
+    call buf_char
+    mov ecx, [wdg_b_w]
+    sub ecx, 2
+    jle .b3_bot_r_asc
+    mov al, CHAR_MINUS
+    call buf_repeat
+.b3_bot_r_asc:
+    mov al, CHAR_PLUS
+    call buf_char
+
+.b3_emit_inner:
+    ; Setup cursor on Row 1 (row + 1) at col + 1 for icon and text
+    mov eax, [wdg_b_row]
+    inc eax
+    mov [wdg_b_row], eax        ; Advance effective row to inner content row
+    mov ebx, [wdg_b_col]
+    inc ebx                     ; Inside left border
+    mov ecx, [wdg_b_w]
+    sub ecx, 2                  ; Inside right border
     call buf_goto
     mov al, dl
     call gfx_set_fg
-    mov al, CHAR_LBRACKET       ; '['
+    cmp ebp, WDG_STATE_FOCUSED
+    jne .b3_check_pressed
+    mov al, '>'
+    call buf_char
+    inc ebx
+    dec ecx
+    jmp .btn_draw_icon_label
+
+.b3_check_pressed:
+    cmp ebp, WDG_STATE_PRESSED
+    jne .b3_normal_inner
+    mov al, CHAR_LBRACKET
+    call buf_char
+    inc ebx
+    dec ecx
+    jmp .btn_draw_icon_label
+
+.b3_normal_inner:
+    mov al, CHAR_SPACE
     call buf_char
     inc ebx
     dec ecx
@@ -681,6 +841,7 @@ wdg_button:
 ; Procedure: wdg_toggle
 ; Purpose:   Draws a label and toggle switch (ON/OFF) state.
 ;            Uses sprite_widget_toggle in UTF-8, and [ OFF] / [ ON ] in ASCII.
+;            Supports focus highlight when EBP == WDG_STATE_FOCUSED.
 ;            Both states distinguishable without color.
 ; IN:        EAX = 1-based absolute terminal row
 ;            EBX = 1-based absolute terminal col
@@ -688,6 +849,7 @@ wdg_button:
 ;            EDX = Height
 ;            ESI = Pointer to label string
 ;            EDI = Toggle state (0 = OFF, 1 = ON)
+;            EBP = Focus state (WDG_STATE_NORMAL / FOCUSED)
 ; OUT:       Appends toggle widget to out_buf
 ; CLOBBERS:  None (preserves all general-purpose registers and EFLAGS)
 ;=============================================================================
@@ -699,6 +861,7 @@ wdg_toggle:
     push edx
     push esi
     push edi
+    push ebp
 
     ; Store inputs
     mov [wdg_t_row], eax
@@ -714,17 +877,188 @@ wdg_toggle:
     cmp edx, 1
     jl .tog_exit
 
-    ; 1. Draw Label text on left
-    push ecx
-    sub ecx, 8                  ; Reserve 8 columns for switch
+    ; Determine colors
     mov dl, SLOT_TEXT
     mov dh, SLOT_SURFACE
+    mov ch, SLOT_BORDER
+    cmp ebp, WDG_STATE_FOCUSED
+    jne .tog_colors_set
+    mov dl, SLOT_TEXT_INV
+    mov dh, SLOT_HIGHLIGHT
+    mov ch, SLOT_BORDER_FOCUS
+
+.tog_colors_set:
+    ; Check if 3-row bordered card (height >= 3)
+    cmp dword [wdg_t_h], 3
+    jl .tog_draw_1row
+
+    ; --- 3-Row Bordered Toggle Card ---
+    ; Row 0: Top border
+    mov eax, [wdg_t_row]
+    mov ebx, [wdg_t_col]
+    call buf_goto
+    mov al, dh
+    call gfx_set_bg
+    mov al, ch
+    call gfx_set_fg
+    cmp byte [setting_charset], 1
+    je .tog3_top_asc
+    mov esi, glyph_utf8_corner_tl
+    call buf_str
+    mov ecx, [wdg_t_w]
+    sub ecx, 2
+.tog3_top_dash:
+    mov esi, glyph_utf8_hline
+    call buf_str
+    dec ecx
+    jnz .tog3_top_dash
+    mov esi, glyph_utf8_corner_tr
+    call buf_str
+    jmp .tog3_mid
+.tog3_top_asc:
+    mov al, CHAR_PLUS
+    call buf_char
+    mov ecx, [wdg_t_w]
+    sub ecx, 2
+    mov al, CHAR_MINUS
+    call buf_repeat
+    mov al, CHAR_PLUS
+    call buf_char
+
+.tog3_mid:
+    ; Row 1: Middle interior
+    mov eax, [wdg_t_row]
+    inc eax
+    mov ebx, [wdg_t_col]
+    call buf_goto
+    mov al, dh
+    call gfx_set_bg
+    mov al, ch
+    call gfx_set_fg
+    cmp byte [setting_charset], 1
+    je .tog3_mid_l_asc
+    mov esi, glyph_utf8_vline
+    call buf_str
+    jmp .tog3_mid_fill
+.tog3_mid_l_asc:
+    mov al, CHAR_PIPE
+    call buf_char
+
+.tog3_mid_fill:
+    mov eax, [wdg_t_row]
+    inc eax
+    mov ebx, [wdg_t_col]
+    inc ebx
+    call buf_goto
+    mov ecx, [wdg_t_w]
+    sub ecx, 2
+    mov al, dh
+    call gfx_set_bg
+    mov al, CHAR_SPACE
+    call buf_repeat
+
+    ; Right border on mid row
+    mov eax, [wdg_t_row]
+    inc eax
+    mov ebx, [wdg_t_col]
+    add ebx, [wdg_t_w]
+    dec ebx
+    call buf_goto
+    mov al, ch
+    call gfx_set_fg
+    cmp byte [setting_charset], 1
+    je .tog3_mid_r_asc
+    mov esi, glyph_utf8_vline
+    call buf_str
+    jmp .tog3_bot
+.tog3_mid_r_asc:
+    mov al, CHAR_PIPE
+    call buf_char
+
+.tog3_bot:
+    ; Row 2: Bottom border
+    mov eax, [wdg_t_row]
+    add eax, 2
+    mov ebx, [wdg_t_col]
+    call buf_goto
+    mov al, dh
+    call gfx_set_bg
+    mov al, ch
+    call gfx_set_fg
+    cmp byte [setting_charset], 1
+    je .tog3_bot_asc
+    mov esi, glyph_utf8_corner_bl
+    call buf_str
+    mov ecx, [wdg_t_w]
+    sub ecx, 2
+.tog3_bot_dash:
+    mov esi, glyph_utf8_hline
+    call buf_str
+    dec ecx
+    jnz .tog3_bot_dash
+    mov esi, glyph_utf8_corner_br
+    call buf_str
+    jmp .tog3_content
+.tog3_bot_asc:
+    mov al, CHAR_PLUS
+    call buf_char
+    mov ecx, [wdg_t_w]
+    sub ecx, 2
+    mov al, CHAR_MINUS
+    call buf_repeat
+    mov al, CHAR_PLUS
+    call buf_char
+
+.tog3_content:
+    ; Advance target row to row + 1, col to col + 1, w to w - 2
+    mov eax, [wdg_t_row]
+    inc eax
+    mov [wdg_t_row], eax
+    mov ebx, [wdg_t_col]
+    inc ebx
+    mov [wdg_t_col], ebx
+    mov ecx, [wdg_t_w]
+    sub ecx, 2
+    mov [wdg_t_w], ecx
+    jmp .tog_render_inner
+
+.tog_draw_1row:
+    ; Single-row toggle background fill
+    mov eax, [wdg_t_row]
+    mov ebx, [wdg_t_col]
+    mov ecx, [wdg_t_w]
+    call buf_goto
+    mov al, dh
+    call gfx_set_bg
+    mov al, CHAR_SPACE
+    call buf_repeat
+
+.tog_render_inner:
+    ; Draw focus marker '>' if focused
+    cmp ebp, WDG_STATE_FOCUSED
+    jne .tog_no_focus_marker
+    mov eax, [wdg_t_row]
+    mov ebx, [wdg_t_col]
+    call buf_goto
+    mov al, dl
+    call gfx_set_fg
+    mov al, '>'
+    call buf_char
+    inc dword [wdg_t_col]
+    dec dword [wdg_t_w]
+
+.tog_no_focus_marker:
+    ; 1. Draw Label text on left
+    mov eax, [wdg_t_row]
+    mov ebx, [wdg_t_col]
+    mov ecx, [wdg_t_w]
+    sub ecx, 8                  ; Reserve 8 columns for switch
+    mov esi, [wdg_t_label]
     call wdg_clip_text
-    pop ecx
 
     ; 2. Draw Switch on right: col = col + w - 8
     mov ebx, [wdg_t_col]
-    add ebx, ecx
+    add ebx, [wdg_t_w]
     sub ebx, 8
 
     ; Check ASCII mode
@@ -732,14 +1066,14 @@ wdg_toggle:
     je .tog_ascii
 
     ; UTF-8 Mode: if height >= 2, render sprite_widget_toggle frame (0 or 1)
-    cmp edx, 2
+    cmp dword [wdg_t_h], 2
     jl .tog_ascii
     push ebx
     sub ebx, [ui_col0]          ; Frame-relative column
     mov eax, [wdg_t_row]
     mov esi, sprite_widget_toggle
     mov ecx, [wdg_t_state]      ; frame index = state (0 or 1)
-    mov edx, SLOT_SURFACE
+    movzx edx, dh               ; fill bg slot
     call sprite_draw
     pop ebx
     jmp .tog_exit
@@ -747,7 +1081,7 @@ wdg_toggle:
 .tog_ascii:
     ; ASCII representation: [ OFF] or [ ON ]
     call buf_goto
-    mov al, SLOT_SURFACE
+    mov al, dh
     call gfx_set_bg
     cmp dword [wdg_t_state], 0
     jne .tog_ascii_on
@@ -787,6 +1121,7 @@ wdg_toggle:
     call buf_char
 
 .tog_exit:
+    pop ebp
     pop edi
     pop esi
     pop edx
@@ -1112,10 +1447,18 @@ wdg_tip_card:
     je .tip_sparkle_ascii
     mov esi, glyph_utf8_sparkle ; ✦
     call buf_str
-    jmp .tip_draw_body
+    jmp .tip_emit_caption
 .tip_sparkle_ascii:
     mov al, CHAR_ASTERISK       ; *
     call buf_char
+
+.tip_emit_caption:
+    mov al, CHAR_SPACE
+    call buf_char
+    mov al, SLOT_DIM
+    call gfx_set_fg
+    mov esi, str_tip_caption    ; "Tip:"
+    call buf_str
 
 .tip_draw_body:
     ; Text wrap loop starting at row + 2

@@ -199,6 +199,7 @@ CHAR_LOWER_Z            equ 122         ; ASCII lowercase 'z'
 CASE_BIT_MASK           equ 0x20        ; Bit 5 mask for ASCII case conversion
 
 KEY_Q                   equ 81          ; ASCII uppercase 'Q' (Quit key)
+KEY_J                   equ 74          ; ASCII uppercase 'J' (Quick Journal key)
 KEY_T                   equ 84          ; ASCII uppercase 'T' (Type line demo key)
 READ_LINE_DEMO_MAX      equ 20          ; Demo line length limit for read_line test
 

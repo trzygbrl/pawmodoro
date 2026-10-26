@@ -181,6 +181,60 @@ section .data
     dash_pomodoros:         dd 0
     dash_habits_done:       dd 0
     dash_habits_total:      dd 0
+    dash_focus:             dd 0                        ; Focused sidebar control index (0..5)
+    dash_prev_focus:        dd 0                        ; Previous sidebar focus for dirty partial redraws
+
+    ; Dashboard Titles and Component Strings (Task G7)
+    dash_title_progress:    db "Today's Progress", CHAR_NULL
+    dash_title_pomo:        db "Today's Progress", CHAR_NULL
+    dash_title_habits:      db " Habits ", CHAR_NULL
+    dash_title_tip:         db " Daily Tip ", CHAR_NULL
+    dash_title_notes:       db " Recent Notes ", CHAR_NULL
+    dash_btn_quick_note:    db "[J] Quick Note", CHAR_NULL
+    dash_no_habits:         db "No habits yet", CHAR_NULL
+    dash_no_notes:          db "No notes yet. Press [J] to add!", CHAR_NULL
+    dash_lbl_pomo_count:    db " pomodoros", CHAR_NULL
+    dash_lbl_habits_prefix: db "Habits: ", CHAR_NULL
+    dash_lbl_done_suffix:   db " done", CHAR_NULL
+    dash_lbl_good_work:     db "Good work today!", CHAR_NULL
+    dash_str_sparkle:       db "✦", CHAR_NULL
+    dash_paw_bullet_utf8:   db "🐾 ", CHAR_NULL
+    dash_paw_bullet_ascii:  db "* ", CHAR_NULL
+
+    ; Sidebar button labels
+    dash_btn_timer_std:     db "Start Focus Session", CHAR_NULL
+    dash_btn_timer_cmp:     db "[1] Start Focus", CHAR_NULL
+    dash_btn_habits_std:    db "Habit Tracker", CHAR_NULL
+    dash_btn_habits_cmp:    db "[2] Habits", CHAR_NULL
+    dash_btn_journal_std:   db "Journal", CHAR_NULL
+    dash_btn_journal_cmp:   db "[3] Journal", CHAR_NULL
+    dash_btn_demo_std:      db "Demo Mode", CHAR_NULL
+    dash_btn_demo_cmp_off:  db "[4] Demo mode: OFF", CHAR_NULL
+    dash_btn_demo_cmp_on:   db "[4] Demo mode: ON", CHAR_NULL
+    dash_btn_settings_std:  db "Settings", CHAR_NULL
+    dash_btn_settings_cmp:  db "[5] Settings", CHAR_NULL
+    dash_btn_quit_std:      db "Quit", CHAR_NULL
+    dash_btn_quit_cmp:      db "[Q] Quit", CHAR_NULL
+
+    ; Footer keybar hints for Main Menu Dashboard
+    str_menu_hint_key1:     db "1-5", CHAR_NULL
+    str_menu_hint_desc1:    db "Select", CHAR_NULL
+    str_menu_hint_key2:     db "Up/Dn", CHAR_NULL
+    str_menu_hint_desc2:    db "Move", CHAR_NULL
+    str_menu_hint_key3:     db "Enter", CHAR_NULL
+    str_menu_hint_desc3:    db "Open", CHAR_NULL
+    str_menu_hint_key4:     db "J", CHAR_NULL
+    str_menu_hint_desc4:    db "Note", CHAR_NULL
+    str_menu_hint_key5:     db "Q", CHAR_NULL
+    str_menu_hint_desc5:    db "Quit", CHAR_NULL
+
+    menu_keybar_hints:
+        dd str_menu_hint_key1, str_menu_hint_desc1, 0
+        dd str_menu_hint_key2, str_menu_hint_desc2, 0
+        dd str_menu_hint_key3, str_menu_hint_desc3, 1
+        dd str_menu_hint_key4, str_menu_hint_desc4, 1
+        dd str_menu_hint_key5, str_menu_hint_desc5, 0
+        dd 0, 0, 0
 
 section .bss
 
@@ -1215,6 +1269,7 @@ section .data
     str_g6_stat_caption:        db "Pomodoros Done", CHAR_NULL
 
     str_g6_tip_sparkle:         db "Daily Tip", CHAR_NULL
+    str_tip_caption:            db "Tip:", CHAR_NULL
     str_g6_tip_body:            db "Small steps every day lead to big achievements! Take a quick pause and hydrate.", CHAR_NULL
     str_g6_tip_short:           db "Stay focused!", CHAR_NULL
     str_g6_tip_empty:           db CHAR_NULL
