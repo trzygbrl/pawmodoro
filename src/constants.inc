@@ -78,6 +78,7 @@ CHAR_LOWER_M            equ 109         ; ASCII lowercase letter m ('m', for ANS
 
 
 KEY_CTRL_C              equ 3           ; ASCII 3 (ETX / Ctrl+C)
+KEY_TAB                 equ 9           ; ASCII 9 (Horizontal Tab)
 KEY_BACKSPACE           equ 127         ; Backspace / Delete
 KEY_ENTER               equ 10          ; Enter / Line Feed
 KEY_ESC                 equ 27          ; Escape key
@@ -489,10 +490,11 @@ TIMER_FRAME_NOTE_RESULT equ 4           ; Note save result status message
 KEY_Y                   equ 89          ; ASCII uppercase 'Y'
 
 ; =============================================================================
-; Task V4 Additions: 256-Color Theme Engine & Settings Persistence (PRD_V2 §4, §5)
+; =============================================================================
+; Task V4 & G2: 256-Color Theme Engine & Settings Persistence (PRD_V2 §4, §5, PRD_V3 §5, §6)
 ; =============================================================================
 
-; 12 Color Slots (Normative Order 0..11, PRD_V2 §4)
+; 24 Color Slots (Normative Order 0..23, PRD_V2 §4, PRD_V3 §5.1, §5.2)
 SLOT_BORDER             equ 0           ; Frames, dividers, borders
 SLOT_TITLE              equ 1           ; Headings, brand title
 SLOT_ACCENT             equ 2           ; Interactive hints, key labels, badges
@@ -505,13 +507,42 @@ SLOT_CAT                equ 8           ; Cat ASCII artwork
 SLOT_BAR_FULL           equ 9           ; Filled progress bar segments
 SLOT_BAR_EMPTY          equ 10          ; Empty progress bar segments
 SLOT_HIGHLIGHT          equ 11          ; Selected row background
+SLOT_BG                 equ 12          ; Application root background
+SLOT_SURFACE            equ 13          ; Sidebar and large panel surface background
+SLOT_SURFACE_ALT        equ 14          ; Inner card background
+SLOT_BORDER_FOCUS       equ 15          ; Highlighted/active card or button border
+SLOT_TITLE_ALT          equ 16          ; End color for brand title gradient
+SLOT_TEXT_INV           equ 17          ; Text drawn over highlighted buttons
+SLOT_FUR                equ 18          ; Base fur color for cat art
+SLOT_FUR_SHADE          equ 19          ; Fur shading / shadow tone
+SLOT_FUR_STRIPE         equ 20          ; Fur tabby stripes
+SLOT_EAR_BLUSH          equ 21          ; Inner ear fill and cheek blush
+SLOT_OUTLINE            equ 22          ; Outer contour outline
+SLOT_EYE_NOSE           equ 23          ; Eyes, pupils, nose, mouth
 
 ; Theme Subsystem Constants
-NUM_SLOTS               equ 12          ; Number of color slots per palette
+NUM_SLOTS               equ 24          ; Number of color slots per palette (24 slots, PRD_V3 §5)
+NUM_INTERFACE_SLOTS     equ 18          ; Interface slots 0..17
+NUM_ART_SLOTS           equ 6           ; Art slots 18..23
+SLOT_ART_START          equ 18          ; First art slot ID
+SLOT_ART_END            equ 23          ; Last art slot ID
 NUM_BUILTIN_THEMES      equ 7           ; Number of built-in themes (0..6)
 THEME_CUSTOM_INDEX      equ 7           ; Theme index for custom user palette
 THEME_MAX_INDEX         equ 7           ; Maximum valid theme index (0..7)
 COLOR_256_MAX           equ 255         ; Maximum 256-color palette index
+
+; Cat Coat Presets (PRD_V3 §5.3)
+COAT_ORANGE             equ 0           ; Orange Tabby (Default)
+COAT_GRAY               equ 1           ; Gray Tabby
+COAT_BLACK              equ 2           ; Black Cat
+COAT_WHITE              equ 3           ; White Cat
+COAT_CREAM              equ 4           ; Cream / Calico
+COAT_TUXEDO             equ 5           ; Tuxedo
+COAT_CUSTOM             equ 6           ; Custom user-defined art colors
+NUM_COATS               equ 7           ; 7 coat options (0..6)
+COAT_MAX_INDEX          equ 6           ; Maximum valid coat index (0..6)
+DEFAULT_COAT            equ 0           ; Default coat: Orange Tabby
+DEFAULT_MOUSE           equ 1           ; Default mouse: enabled (1)
 
 ; Built-in Theme Indices
 THEME_STRAWBERRY        equ 0           ; Strawberry Milk (default warm look)
@@ -523,24 +554,38 @@ THEME_MONO              equ 5           ; Mono Cozy
 THEME_CONTRAST          equ 6           ; High Contrast
 THEME_CUSTOM            equ 7           ; Custom user-defined palette
 
-; Settings Persistence File Format (settings.dat, 24 bytes, PRD_V2 §5)
-SETTINGS_FILE_SIZE      equ 24          ; Exact settings.dat file size in bytes
+; Settings Persistence File Format (settings.dat v1 = 24 bytes, v2 = 48 bytes, PRD_V3 §6)
+SETTINGS_FILE_SIZE      equ 48          ; Version 2 exact file size in bytes
+SETTINGS_V1_FILE_SIZE   equ 24          ; Version 1 legacy file size in bytes
 SETTINGS_MAGIC          equ 0x53574150  ; Little-endian magic dword ('PAWS': 0x50, 0x41, 0x57, 0x53)
-SETTINGS_VERSION        equ 1           ; Settings file format version
+SETTINGS_VERSION        equ 2           ; Version 2
+SETTINGS_V1_VERSION     equ 1           ; Version 1
 
-; Settings Record Field Offsets (PRD_V2 §5)
+; Version 2 Field Offsets (PRD_V3 §6.1)
 SETTINGS_OFF_MAGIC      equ 0           ; Offset 0: 4 bytes dword magic
-SETTINGS_OFF_VERSION    equ 4           ; Offset 4: 1 byte version (1)
+SETTINGS_OFF_VERSION    equ 4           ; Offset 4: 1 byte version (2)
 SETTINGS_OFF_THEME      equ 5           ; Offset 5: 1 byte active theme index (0..7)
-SETTINGS_OFF_CUSTOM     equ 6           ; Offset 6: 12 bytes custom palette indices
-SETTINGS_OFF_ANIM       equ 18          ; Offset 18: 1 byte animation flag (0 or 1)
-SETTINGS_OFF_SOUND      equ 19          ; Offset 19: 1 byte sound flag (0 or 1)
-SETTINGS_OFF_CHARSET    equ 20          ; Offset 20: 1 byte charset flag (0 = UTF-8, 1 = ASCII)
-SETTINGS_OFF_NOTIFY     equ 21          ; Offset 21: 1 byte notification master flag (0 or 1)
-SETTINGS_OFF_LAYERS     equ 22          ; Offset 22: 1 byte notification layers bitmask
-SETTINGS_OFF_VOLUME     equ 23          ; Offset 23: 1 byte audio volume (0..3)
+SETTINGS_OFF_CUSTOM     equ 6           ; Offset 6: 24 bytes custom palette indices
+SETTINGS_OFF_ANIM       equ 30          ; Offset 30 (0x1E): 1 byte animation flag (0 or 1)
+SETTINGS_OFF_SOUND      equ 31          ; Offset 31 (0x1F): 1 byte sound flag (0 or 1)
+SETTINGS_OFF_CHARSET    equ 32          ; Offset 32 (0x20): 1 byte charset flag (0 = UTF-8, 1 = ASCII)
+SETTINGS_OFF_NOTIFY     equ 33          ; Offset 33 (0x21): 1 byte notification master flag (0 or 1)
+SETTINGS_OFF_LAYERS     equ 34          ; Offset 34 (0x22): 1 byte notification layers bitmask
+SETTINGS_OFF_VOLUME     equ 35          ; Offset 35 (0x23): 1 byte audio volume (0..3)
+SETTINGS_OFF_MOUSE      equ 36          ; Offset 36 (0x24): 1 byte mouse flag (0 or 1)
+SETTINGS_OFF_COAT       equ 37          ; Offset 37 (0x25): 1 byte coat index (0..6)
+SETTINGS_OFF_RESERVED   equ 38          ; Offset 38 (0x26): 6 bytes reserved (MUST be 0)
+SETTINGS_RESERVED_LEN   equ 6           ; Reserved field length in bytes
 
-; Settings Field Validation Limits & Default Values (PRD_V2 §5)
+; Legacy Version 1 Field Offsets (for migration)
+SETTINGS_V1_OFF_ANIM    equ 18
+SETTINGS_V1_OFF_SOUND   equ 19
+SETTINGS_V1_OFF_CHARSET equ 20
+SETTINGS_V1_OFF_NOTIFY  equ 21
+SETTINGS_V1_OFF_LAYERS  equ 22
+SETTINGS_V1_OFF_VOLUME  equ 23
+
+; Settings Field Validation Limits & Default Values (PRD_V2 §5, PRD_V3 §6.1)
 NOTIFY_LAYERS_MASK      equ 0x1F        ; Valid bits 0..4 (bell, flash, title, progress, desktop)
 MAX_VOLUME              equ 3           ; Maximum valid volume level (0..3)
 DEFAULT_ANIM            equ 1           ; Default animation: enabled (1)
@@ -551,16 +596,21 @@ DEFAULT_NOTIFY_LAYERS   equ 0x01        ; Default notification layers: bell only
 DEFAULT_VOLUME          equ 2           ; Default volume: 2 (medium)
 
 ; =============================================================================
-; Task V5 Additions: Settings Screen & Custom Color Editor (PRD_V2 §4, §5, §6)
+; Task V5 & G2: Settings Screen & Custom Color Editor (PRD_V2 §4, §5, §6, PRD_V3 §5)
 ; =============================================================================
-SETTINGS_ROW_COUNT      equ 7           ; 7 selectable settings rows (0..6)
+SETTINGS_ROW_COUNT      equ 8           ; 8 selectable settings rows (0..7)
 SETTINGS_ROW_THEME      equ 0           ; Theme cycle row
 SETTINGS_ROW_CUSTOMIZE  equ 1           ; Customize colors row
-SETTINGS_ROW_ANIM       equ 2           ; Animations on/off row
-SETTINGS_ROW_SOUND      equ 3           ; Sound on/off & volume row
-SETTINGS_ROW_CHARSET    equ 4           ; Charset UTF-8 / ASCII row
-SETTINGS_ROW_NOTIFY     equ 5           ; Terminal integration on/off row
-SETTINGS_ROW_RESET      equ 6           ; Reset to defaults row
+SETTINGS_ROW_COAT       equ 2           ; Cat coat cycle row
+SETTINGS_ROW_ANIM       equ 3           ; Animations on/off row
+SETTINGS_ROW_SOUND      equ 4           ; Sound on/off & volume row
+SETTINGS_ROW_CHARSET    equ 5           ; Charset UTF-8 / ASCII row
+SETTINGS_ROW_NOTIFY     equ 6           ; Terminal integration on/off row
+SETTINGS_ROW_RESET      equ 7           ; Reset to defaults row
+
+; Color Editor Group Identifiers (PRD_V3 §5, G2)
+COLOR_GROUP_INTERFACE   equ 0           ; Interface slots 0..17
+COLOR_GROUP_ART         equ 1           ; Art slots 18..23
 
 ; Settings Sub-View Modes
 SETTINGS_MODE_MAIN      equ 0           ; Main settings list

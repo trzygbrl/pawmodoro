@@ -117,7 +117,11 @@ settings_draw:
     mov eax, 23
     mov ebx, 1
     call buf_goto
+    mov al, SLOT_BG
+    call ui_bgcolor
     mov esi, ansi_erase_eos
+    call buf_str
+    mov esi, ansi_reset
     call buf_str
 
     ; -------------------------------------------------------------------------
@@ -194,11 +198,94 @@ settings_draw:
     call buf_str
     pop ecx
     inc ecx
-    cmp ecx, NUM_SLOTS          ; 12 slots
+    cmp ecx, NUM_SLOTS          ; 24 slots
     jb .swatch_loop
 
-    ; Sample Line at (Screen Row 6, Col 26)
+    ; -------------------------------------------------------------------------
+    ; Row 1: Customize colors (Screen Row 6)
+    ; -------------------------------------------------------------------------
     mov eax, 6
+    mov edx, SETTINGS_ROW_CUSTOMIZE
+    mov esi, settings_lbl_customize
+    call settings_draw_row_label
+
+    mov eax, 6
+    mov ebx, 26
+    call ui_goto
+    mov esi, settings_hint_customize
+    call buf_str
+
+    ; -------------------------------------------------------------------------
+    ; Row 2: Cat coat (Screen Row 7)
+    ; -------------------------------------------------------------------------
+    mov eax, 7
+    mov edx, SETTINGS_ROW_COAT
+    mov esi, settings_lbl_coat
+    call settings_draw_row_label
+
+    ; Value: < Coat Name > at (Screen Row 7, Col 26)
+    mov eax, 7
+    mov ebx, 26
+    call ui_goto
+    mov al, '<'
+    call buf_char
+    mov al, ' '
+    call buf_char
+
+    movzx eax, byte [setting_coat]
+    cmp eax, COAT_MAX_INDEX
+    jbe .coat_name_valid
+    xor eax, eax
+.coat_name_valid:
+    mov esi, [coat_names + eax*4]
+    call buf_str
+
+    mov al, ' '
+    call buf_char
+    mov al, '>'
+    call buf_char
+
+    ; Live Sample Cat (ASCII 2-line placeholder) at Col 50
+    ; Line 1:  /\_/\  at (Screen Row 7, Col 51)
+    mov eax, 7
+    mov ebx, 51
+    call ui_goto
+    mov al, SLOT_FUR
+    call ui_color
+    mov esi, cat_placeholder_l1
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+
+    ; Line 2: ( o.o ) at (Screen Row 8, Col 50)
+    mov eax, 8
+    mov ebx, 50
+    call ui_goto
+    mov al, SLOT_FUR
+    call ui_color
+    mov al, '('
+    call buf_char
+    mov al, ' '
+    call buf_char
+    mov al, SLOT_EYE_NOSE
+    call ui_color
+    mov al, 'o'
+    call buf_char
+    mov al, '.'
+    call buf_char
+    mov al, 'o'
+    call buf_char
+    mov al, SLOT_FUR
+    call ui_color
+    mov al, ' '
+    call buf_char
+    mov al, ')'
+    call buf_char
+    mov esi, ansi_reset
+    call buf_str
+
+    ; Sample Line at (Screen Row 9, Col 26)
+    mov eax, 9
     mov ebx, 26
     call ui_goto
 
@@ -236,20 +323,6 @@ settings_draw:
     call buf_str
 
     mov esi, ansi_reset
-    call buf_str
-
-    ; -------------------------------------------------------------------------
-    ; Row 1: Customize colors (Screen Row 8)
-    ; -------------------------------------------------------------------------
-    mov eax, 8
-    mov edx, SETTINGS_ROW_CUSTOMIZE
-    mov esi, settings_lbl_customize
-    call settings_draw_row_label
-
-    mov eax, 8
-    mov ebx, 26
-    call ui_goto
-    mov esi, settings_hint_customize
     call buf_str
 
     ; -------------------------------------------------------------------------
@@ -675,19 +748,23 @@ settings_handle_key:
     cmp edx, SETTINGS_ROW_THEME
     je .theme_prev
 
-    ; Row 2: Animations (toggle)
+    ; Row 2: Cat coat (cycle backward)
+    cmp edx, SETTINGS_ROW_COAT
+    je .coat_prev
+
+    ; Row 3: Animations (toggle)
     cmp edx, SETTINGS_ROW_ANIM
     je .toggle_anim
 
-    ; Row 3: Sound & Volume (decrease volume)
+    ; Row 4: Sound & Volume (decrease volume)
     cmp edx, SETTINGS_ROW_SOUND
     je .vol_down
 
-    ; Row 4: Charset (toggle)
+    ; Row 5: Charset (toggle)
     cmp edx, SETTINGS_ROW_CHARSET
     je .toggle_charset
 
-    ; Row 5: Terminal integration (toggle)
+    ; Row 6: Terminal integration (toggle)
     cmp edx, SETTINGS_ROW_NOTIFY
     je .toggle_notify
 
@@ -704,19 +781,23 @@ settings_handle_key:
     cmp edx, SETTINGS_ROW_CUSTOMIZE
     je .open_colors
 
-    ; Row 2: Animations (toggle)
+    ; Row 2: Cat coat (cycle forward)
+    cmp edx, SETTINGS_ROW_COAT
+    je .coat_next
+
+    ; Row 3: Animations (toggle)
     cmp edx, SETTINGS_ROW_ANIM
     je .toggle_anim
 
-    ; Row 3: Sound & Volume (increase volume)
+    ; Row 4: Sound & Volume (increase volume)
     cmp edx, SETTINGS_ROW_SOUND
     je .vol_up
 
-    ; Row 4: Charset (toggle)
+    ; Row 5: Charset (toggle)
     cmp edx, SETTINGS_ROW_CHARSET
     je .toggle_charset
 
-    ; Row 5: Terminal integration (toggle)
+    ; Row 6: Terminal integration (toggle)
     cmp edx, SETTINGS_ROW_NOTIFY
     je .toggle_notify
 
@@ -730,6 +811,9 @@ settings_handle_key:
 
     cmp edx, SETTINGS_ROW_CUSTOMIZE
     je .open_colors
+
+    cmp edx, SETTINGS_ROW_COAT
+    je .coat_next
 
     cmp edx, SETTINGS_ROW_ANIM
     je .toggle_anim
@@ -746,6 +830,31 @@ settings_handle_key:
     cmp edx, SETTINGS_ROW_RESET
     je .open_confirm
 
+    jmp .key_done
+
+.coat_prev:
+    movzx eax, byte [setting_coat]
+    test eax, eax
+    jz .coat_wrap_max
+    dec al
+    jmp .apply_coat_change
+.coat_wrap_max:
+    mov al, COAT_MAX_INDEX
+    jmp .apply_coat_change
+
+.coat_next:
+    movzx eax, byte [setting_coat]
+    cmp al, COAT_MAX_INDEX
+    jae .coat_wrap_zero
+    inc al
+    jmp .apply_coat_change
+.coat_wrap_zero:
+    xor al, al
+
+.apply_coat_change:
+    mov [setting_coat], al
+    call settings_apply_palette
+    call settings_mutate_and_save
     jmp .key_done
 
 .theme_prev:
@@ -776,6 +885,8 @@ settings_handle_key:
 .open_colors:
     mov dword [settings_view_mode], SETTINGS_MODE_COLORS
     mov dword [settings_color_slot], 0
+    mov dword [settings_color_group], COLOR_GROUP_INTERFACE
+    mov dword [settings_color_scroll], 0
     jmp .key_done
 
 .toggle_anim:
@@ -903,7 +1014,11 @@ settings_colors_draw:
     mov eax, 24
     mov ebx, 1
     call buf_goto
+    mov al, SLOT_BG
+    call ui_bgcolor
     mov esi, ansi_erase_eos
+    call buf_str
+    mov esi, ansi_reset
     call buf_str
 
     ; -------------------------------------------------------------------------
@@ -923,24 +1038,54 @@ settings_colors_draw:
     call buf_str
 
     ; -------------------------------------------------------------------------
-    ; Left Column: 12 Named Slots (Screen Rows 4..15)
+    ; Left Column: 24 Slots divided into Interface (0..17) and Art (18..23)
     ; -------------------------------------------------------------------------
-    xor ecx, ecx                ; ECX = slot index (0..11)
-.slot_row_loop:
-    push ecx
-
+    ; Group Header Tabs at (Row 4, Col 4)
     mov eax, 4
-    add eax, ecx                ; EAX = screen row (4 + slot)
-
-    ; Position at (row, 4)
     mov ebx, 4
     call ui_goto
 
-    ; Selection marker
-    cmp ecx, [settings_color_slot]
-    jne .slot_not_sel
+    cmp dword [settings_color_group], COLOR_GROUP_INTERFACE
+    jne .draw_art_tab_header
 
-    ; Selected slot marker '>' in bold SLOT_ACCENT
+    ; Interface tab active:
+    mov esi, color_lbl_group_interface
+    call buf_str
+    jmp .draw_group_slots
+
+.draw_art_tab_header:
+    mov esi, color_lbl_group_art
+    call buf_str
+
+.draw_group_slots:
+    cmp dword [settings_color_group], COLOR_GROUP_INTERFACE
+    jne .draw_art_slots
+
+    ; -------------------------------------------------------------------------
+    ; Interface Group: slots 0..17, 15 visible rows (Screen Rows 5..19)
+    ; Window offset given by [settings_color_scroll] (0..3)
+    ; -------------------------------------------------------------------------
+    xor ecx, ecx                ; ECX = row counter within window (0..14)
+.iface_row_loop:
+    push ecx
+
+    mov eax, ecx
+    add eax, [settings_color_scroll] ; EAX = slot index (0..17)
+    push eax                    ; save slot index on stack
+
+    mov eax, 5
+    add eax, ecx                ; Screen row = 5 + ecx
+    mov ebx, 4                  ; Column 4
+    call ui_goto
+
+    pop edx                     ; EDX = slot index
+    push edx                    ; re-save slot index
+
+    ; Compare with selected slot
+    cmp edx, [settings_color_slot]
+    jne .iface_slot_not_sel
+
+    ; Selected slot: '>' marker in bold SLOT_ACCENT
     mov esi, ansi_bold
     call buf_str
     mov al, SLOT_ACCENT
@@ -951,13 +1096,13 @@ settings_colors_draw:
     call buf_char
 
     ; Slot Name in bold SLOT_ACCENT
-    mov esi, [slot_names + ecx*4]
+    mov esi, [slot_names + edx*4]
     call buf_str
     mov esi, ansi_reset
     call buf_str
-    jmp .slot_color_val
+    jmp .iface_slot_val
 
-.slot_not_sel:
+.iface_slot_not_sel:
     mov al, ' '
     call buf_char
     mov al, ' '
@@ -966,19 +1111,21 @@ settings_colors_draw:
     ; Slot Name in standard SLOT_TEXT
     mov al, SLOT_TEXT
     call ui_color
-    mov esi, [slot_names + ecx*4]
+    mov esi, [slot_names + edx*4]
     call buf_str
     mov esi, ansi_reset
     call buf_str
 
-.slot_color_val:
+.iface_slot_val:
     ; Decimal color index in parentheses: "(211)"
     mov al, ' '
     call buf_char
     mov al, '('
     call buf_char
 
-    movzx eax, byte [active_palette + ecx]
+    pop edx                     ; EDX = slot index
+    push edx
+    movzx eax, byte [active_palette + edx]
     call buf_u32
 
     mov al, ')'
@@ -987,7 +1134,89 @@ settings_colors_draw:
     call buf_char
 
     ; 2-character color swatch in slot's color
-    mov al, cl
+    pop edx                     ; EDX = slot index
+    mov al, dl
+    call ui_bgcolor
+    mov al, CHAR_SPACE
+    call buf_char
+    call buf_char
+    mov esi, ansi_reset
+    call buf_str
+
+    pop ecx                     ; ECX = row index
+    inc ecx
+    cmp ecx, 15                 ; 15 visible lines
+    jb .iface_row_loop
+    jmp .left_col_done
+
+.draw_art_slots:
+    ; -------------------------------------------------------------------------
+    ; Art Group: slots 18..23 (6 slots) at Screen Rows 5..10
+    ; -------------------------------------------------------------------------
+    mov ecx, SLOT_ART_START     ; 18
+.art_row_loop:
+    push ecx
+
+    mov eax, 5
+    add eax, ecx
+    sub eax, SLOT_ART_START     ; Screen row = 5 + (ecx - 18)
+    mov ebx, 4
+    call ui_goto
+
+    mov edx, [esp]              ; EDX = slot index (18..23)
+
+    cmp edx, [settings_color_slot]
+    jne .art_slot_not_sel
+
+    ; Selected: '>' marker in bold SLOT_ACCENT
+    mov esi, ansi_bold
+    call buf_str
+    mov al, SLOT_ACCENT
+    call ui_color
+    mov al, '>'
+    call buf_char
+    mov al, ' '
+    call buf_char
+
+    ; Slot Name in bold SLOT_ACCENT
+    mov esi, [slot_names + edx*4]
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+    jmp .art_slot_val
+
+.art_slot_not_sel:
+    mov al, ' '
+    call buf_char
+    mov al, ' '
+    call buf_char
+
+    ; Slot Name in standard SLOT_TEXT
+    mov al, SLOT_TEXT
+    call ui_color
+    mov esi, [slot_names + edx*4]
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+
+.art_slot_val:
+    mov al, ' '
+    call buf_char
+    mov al, '('
+    call buf_char
+
+    mov edx, [esp]              ; EDX = slot index
+    movzx eax, byte [active_palette + edx]
+    call buf_u32
+
+    mov al, ')'
+    call buf_char
+    mov al, ' '
+    call buf_char
+
+    ; 2-character color swatch
+    mov edx, [esp]
+    mov al, dl
     call ui_bgcolor
     mov al, CHAR_SPACE
     call buf_char
@@ -997,8 +1226,79 @@ settings_colors_draw:
 
     pop ecx
     inc ecx
-    cmp ecx, NUM_SLOTS          ; 12
-    jb .slot_row_loop
+    cmp ecx, NUM_SLOTS          ; 24
+    jb .art_row_loop
+
+    ; Informational rows below Art slots:
+    ; Row 12, Col 4: Active coat: < Coat Name >
+    mov eax, 12
+    mov ebx, 4
+    call ui_goto
+    mov al, SLOT_TEXT
+    call ui_color
+    mov esi, color_coat_lbl_prefix  ; "Coat: < "
+    call buf_str
+
+    movzx eax, byte [setting_coat]
+    cmp eax, COAT_MAX_INDEX
+    jbe .art_coat_valid
+    xor eax, eax
+.art_coat_valid:
+    mov esi, [coat_names + eax*4]
+    call buf_str
+    mov esi, color_coat_lbl_suffix  ; " >"
+    call buf_str
+
+    ; Row 13, Col 4: Note about Custom coat
+    mov eax, 13
+    mov ebx, 4
+    call ui_goto
+    mov al, SLOT_DIM
+    call ui_color
+    mov esi, color_coat_edit_note   ; "(Art edits set Coat to Custom)"
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+
+    ; Row 15, Col 9: Placeholder cat line 1 in fur colors
+    mov eax, 15
+    mov ebx, 9
+    call ui_goto
+    mov al, SLOT_FUR
+    call ui_color
+    mov esi, cat_placeholder_l1
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+
+    ; Row 16, Col 8: Placeholder cat line 2 in fur and eye colors
+    mov eax, 16
+    mov ebx, 8
+    call ui_goto
+    mov al, SLOT_FUR
+    call ui_color
+    mov al, '('
+    call buf_char
+    mov al, ' '
+    call buf_char
+    mov al, SLOT_EYE_NOSE
+    call ui_color
+    mov al, 'o'
+    call buf_char
+    mov al, '.'
+    call buf_char
+    mov al, 'o'
+    call buf_char
+    mov al, SLOT_FUR
+    call ui_color
+    mov al, ' '
+    call buf_char
+    mov al, ')'
+    call buf_char
+    mov esi, ansi_reset
+    call buf_str
+
+.left_col_done:
 
     ; -------------------------------------------------------------------------
     ; Right Column: 16x16 Color Palette Grid (Screen Rows 4..19, Col 34)
@@ -1126,6 +1426,20 @@ settings_colors_draw:
     je .sample_bar_empty
     cmp edx, SLOT_HIGHLIGHT
     je .sample_highlight
+    cmp edx, SLOT_BG
+    je .sample_bg
+    cmp edx, SLOT_SURFACE
+    je .sample_surface
+    cmp edx, SLOT_SURFACE_ALT
+    je .sample_surface
+    cmp edx, SLOT_BORDER_FOCUS
+    je .sample_border_focus
+    cmp edx, SLOT_TITLE_ALT
+    je .sample_title_alt
+    cmp edx, SLOT_TEXT_INV
+    je .sample_text_inv
+    cmp edx, SLOT_ART_START     ; >= 18 is cat art slot
+    jae .sample_art
 
     jmp .sample_done
 
@@ -1256,6 +1570,96 @@ settings_colors_draw:
     call buf_char
     mov esi, ansi_reset
     call buf_str
+    jmp .sample_done
+
+.sample_bg:
+    mov al, SLOT_BG
+    call ui_bgcolor
+    mov esi, ansi_bold
+    call buf_str
+    mov al, ' '
+    call buf_char
+    mov al, ' '
+    call buf_char
+    mov al, 'B'
+    call buf_char
+    mov al, 'G'
+    call buf_char
+    mov al, ' '
+    call buf_char
+    mov al, ' '
+    call buf_char
+    mov esi, ansi_reset
+    call buf_str
+    jmp .sample_done
+
+.sample_surface:
+    mov al, dl
+    call ui_bgcolor
+    mov esi, ansi_bold
+    call buf_str
+    mov al, ' '
+    call buf_char
+    mov al, 'S'
+    call buf_char
+    mov al, 'u'
+    call buf_char
+    mov al, 'r'
+    call buf_char
+    mov al, 'f'
+    call buf_char
+    mov al, 'a'
+    call buf_char
+    mov al, 'c'
+    call buf_char
+    mov al, 'e'
+    call buf_char
+    mov al, ' '
+    call buf_char
+    mov esi, ansi_reset
+    call buf_str
+    jmp .sample_done
+
+.sample_border_focus:
+    mov al, SLOT_BORDER_FOCUS
+    call ui_color
+    mov al, '='
+    mov ecx, 26
+    call buf_repeat
+    jmp .sample_done
+
+.sample_title_alt:
+    mov esi, ansi_bold
+    call buf_str
+    mov al, SLOT_TITLE_ALT
+    call ui_color
+    mov esi, title_settings
+    call buf_str
+    jmp .sample_done
+
+.sample_text_inv:
+    mov al, SLOT_TEXT
+    call ui_bgcolor
+    mov al, SLOT_TEXT_INV
+    call ui_color
+    mov al, ' '
+    call buf_char
+    mov esi, settings_sample_text
+    call buf_str
+    mov esi, ansi_reset
+    call buf_str
+    jmp .sample_done
+
+.sample_art:
+    mov al, dl
+    call ui_color
+    mov esi, cat_placeholder_l1
+    call buf_str
+    mov al, ' '
+    call buf_char
+    mov esi, cat_placeholder_l2
+    call buf_str
+    jmp .sample_done
 
 .sample_done:
     mov esi, ansi_reset
@@ -1297,6 +1701,14 @@ settings_colors_handle_key:
     push edx
     push esi
     push edi
+
+    ; Group Switching: Tab (toggle), '[' (Interface), ']' (Art)
+    cmp eax, KEY_TAB
+    je .c_group_toggle
+    cmp eax, '['
+    je .c_group_interface
+    cmp eax, ']'
+    je .c_group_art
 
     ; Slot Navigation: Up Arrow / 'K'
     cmp eax, KEY_UP
@@ -1346,31 +1758,120 @@ settings_colors_handle_key:
 
     jmp .c_key_done
 
+.c_group_toggle:
+    xor dword [settings_color_group], 1
+    jmp .c_group_sync
+
+.c_group_interface:
+    mov dword [settings_color_group], COLOR_GROUP_INTERFACE
+    jmp .c_group_sync
+
+.c_group_art:
+    mov dword [settings_color_group], COLOR_GROUP_ART
+    jmp .c_group_sync
+
+.c_group_sync:
+    cmp dword [settings_color_group], COLOR_GROUP_INTERFACE
+    jne .c_sync_art
+    ; Switched to Interface: slot must be 0..17
+    cmp dword [settings_color_slot], SLOT_ART_START ; 18
+    jb .c_key_done
+    mov dword [settings_color_slot], 0
+    mov dword [settings_color_scroll], 0
+    jmp .c_key_done
+
+.c_sync_art:
+    ; Switched to Art: slot must be 18..23
+    cmp dword [settings_color_slot], SLOT_ART_START ; 18
+    jae .c_key_done
+    mov dword [settings_color_slot], SLOT_ART_START
+    jmp .c_key_done
+
 .c_nav_up:
+    cmp dword [settings_color_group], COLOR_GROUP_INTERFACE
+    jne .c_art_nav_up
+
+    ; Interface navigation Up (0..17)
     mov edx, [settings_color_slot]
     test edx, edx
-    jz .c_wrap_to_bottom
+    jz .c_iface_wrap_bottom
+    dec dword [settings_color_slot]
+    ; Check if slot < scroll
+    mov edx, [settings_color_slot]
+    cmp edx, [settings_color_scroll]
+    jae .c_key_done
+    mov [settings_color_scroll], edx
+    jmp .c_key_done
+
+.c_iface_wrap_bottom:
+    mov dword [settings_color_slot], (NUM_INTERFACE_SLOTS - 1) ; 17
+    mov dword [settings_color_scroll], 3                       ; 17 - 14 = 3
+    jmp .c_key_done
+
+.c_art_nav_up:
+    ; Art navigation Up (18..23)
+    mov edx, [settings_color_slot]
+    cmp edx, SLOT_ART_START     ; 18
+    jbe .c_art_wrap_bottom
     dec dword [settings_color_slot]
     jmp .c_key_done
-.c_wrap_to_bottom:
-    mov dword [settings_color_slot], (NUM_SLOTS - 1)
+.c_art_wrap_bottom:
+    mov dword [settings_color_slot], (NUM_SLOTS - 1) ; 23
     jmp .c_key_done
 
 .c_nav_down:
+    cmp dword [settings_color_group], COLOR_GROUP_INTERFACE
+    jne .c_art_nav_down
+
+    ; Interface navigation Down (0..17)
     mov edx, [settings_color_slot]
-    cmp edx, (NUM_SLOTS - 1)
-    jae .c_wrap_to_top
+    cmp edx, (NUM_INTERFACE_SLOTS - 1) ; 17
+    jae .c_iface_wrap_top
+    inc dword [settings_color_slot]
+    ; Check if slot >= scroll + 15
+    mov edx, [settings_color_slot]
+    mov eax, [settings_color_scroll]
+    add eax, 14                 ; visible rows: scroll..scroll+14
+    cmp edx, eax
+    jbe .c_key_done
+    ; Scroll down
+    sub edx, 14
+    mov [settings_color_scroll], edx
+    jmp .c_key_done
+
+.c_iface_wrap_top:
+    mov dword [settings_color_slot], 0
+    mov dword [settings_color_scroll], 0
+    jmp .c_key_done
+
+.c_art_nav_down:
+    ; Art navigation Down (18..23)
+    mov edx, [settings_color_slot]
+    cmp edx, (NUM_SLOTS - 1)    ; 23
+    jae .c_art_wrap_top
     inc dword [settings_color_slot]
     jmp .c_key_done
-.c_wrap_to_top:
-    mov dword [settings_color_slot], 0
+.c_art_wrap_top:
+    mov dword [settings_color_slot], SLOT_ART_START ; 18
     jmp .c_key_done
 
 .c_nav_home:
+    cmp dword [settings_color_group], COLOR_GROUP_INTERFACE
+    jne .c_art_nav_home
     mov dword [settings_color_slot], 0
+    mov dword [settings_color_scroll], 0
+    jmp .c_key_done
+.c_art_nav_home:
+    mov dword [settings_color_slot], SLOT_ART_START
     jmp .c_key_done
 
 .c_nav_end:
+    cmp dword [settings_color_group], COLOR_GROUP_INTERFACE
+    jne .c_art_nav_end
+    mov dword [settings_color_slot], (NUM_INTERFACE_SLOTS - 1)
+    mov dword [settings_color_scroll], 3
+    jmp .c_key_done
+.c_art_nav_end:
     mov dword [settings_color_slot], (NUM_SLOTS - 1)
     jmp .c_key_done
 
@@ -1447,15 +1948,21 @@ settings_apply_slot_color:
 
     mov bl, al                  ; BL = new color byte
 
+    ; If slot is an art slot (18..23), automatically set coat to Custom (6)
+    cmp dword [settings_color_slot], SLOT_ART_START ; 18
+    jb .slot_not_art
+    mov byte [setting_coat], COAT_CUSTOM            ; 6
+.slot_not_art:
+
     ; Check if current theme is Custom (7)
     cmp byte [setting_theme], THEME_CUSTOM_INDEX
     je .already_custom
 
     ; Transitioning from built-in to custom:
-    ; Copy current active_palette into custom_palette first
+    ; Copy current active_palette into custom_palette first (24 bytes = 6 dwords)
     mov esi, active_palette
     mov edi, custom_palette
-    mov ecx, 3                  ; 3 dwords = 12 bytes
+    mov ecx, (NUM_SLOTS / 4)    ; 6 dwords = 24 bytes
     rep movsd
 
     ; Set theme to Custom (7)
@@ -1464,12 +1971,15 @@ settings_apply_slot_color:
 .already_custom:
     ; Update both custom_palette and active_palette at slot index
     mov edx, [settings_color_slot]
+    cmp edx, NUM_SLOTS
+    jae .apply_done
     mov [custom_palette + edx], bl
     mov [active_palette + edx], bl
 
     ; Persist to disk immediately
     call settings_mutate_and_save
 
+.apply_done:
     pop edi
     pop esi
     pop edx

@@ -494,13 +494,13 @@ fi
 send "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
 if wait_for "P A W M O D O R O" 5; then
     send "5"
-    if wait_for "SETTINGS" 5 && cap | grep -q "Theme" && cap | grep -q "Customize colors" && cap | grep -q "Animations" && cap | grep -q "Sound & Volume" && cap | grep -q "Reset to defaults"; then
+    if wait_for "SETTINGS" 5 && cap | grep -q "Theme" && cap | grep -q "Customize colors" && cap | grep -q "Cat coat" && cap | grep -q "Animations" && cap | grep -q "Sound & Volume" && cap | grep -q "Reset to defaults"; then
         send "Down"
         sleep 0.2
         send Enter
-        if wait_for "CUSTOMIZE COLORS" 5 && cap | grep -q "BORDER" && cap | grep -q "HIGHLIGHT"; then
+        if wait_for "CUSTOMIZE COLORS" 5 && cap | grep -q "BORDER" && cap | grep -q "HIGHLIGHT" && cap | grep -q "Interface"; then
             send "B"
-            if wait_for "Animations" 5; then
+            if wait_for "Cat coat" 5; then
                 send "Up"
                 sleep 0.2
                 send "Right"
@@ -512,10 +512,10 @@ if wait_for "P A W M O D O R O" 5; then
                         sleep 0.4
                         if [ -f "$TMP_DIR/settings.dat" ]; then
                             SETTINGS_SIZE=$(stat -c %s "$TMP_DIR/settings.dat")
-                            if [ "$SETTINGS_SIZE" -eq 24 ]; then
-                                pass "Scenario 17 - Settings navigation, color editor, immediate save, and 24B settings.dat"
+                            if [ "$SETTINGS_SIZE" -eq 48 ]; then
+                                pass "Scenario 17 - Settings navigation, Cat coat, color editor, immediate save, and 48B settings.dat"
                             else
-                                fail "Scenario 17 - settings.dat size is $SETTINGS_SIZE bytes (expected 24)"
+                                fail "Scenario 17 - settings.dat size is $SETTINGS_SIZE bytes (expected 48)"
                             fi
                         else
                             fail "Scenario 17 - settings.dat file was not created"
@@ -530,10 +530,10 @@ if wait_for "P A W M O D O R O" 5; then
                 fail "Scenario 17 - Key B from Color Editor did not return to SETTINGS"
             fi
         else
-            fail "Scenario 17 - Enter did not open CUSTOMIZE COLORS screen"
+            fail "Scenario 17 - Enter did not open CUSTOMIZE COLORS screen with Interface group"
         fi
     else
-        fail "Scenario 17 - Key 5 did not display all SETTINGS rows"
+        fail "Scenario 17 - Key 5 did not display all SETTINGS rows including Cat coat"
     fi
 else
     fail "Scenario 17 - Application failed to start for Settings test"
@@ -764,7 +764,7 @@ if tmux capture-pane -t "$TMUX_THEME" -p | grep -q "P A W M O D O R O"; then
     sleep 0.4
 
     # Check settings.dat size
-    if [ -f "$THEME_SUBDIR/settings.dat" ] && [ "$(stat -c %s "$THEME_SUBDIR/settings.dat")" -eq 24 ]; then
+    if [ -f "$THEME_SUBDIR/settings.dat" ] && [ "$(stat -c %s "$THEME_SUBDIR/settings.dat")" -eq 48 ]; then
         # Restart 1
         tmux send-keys -t "$TMUX_THEME" "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
         sleep 0.4
@@ -818,11 +818,15 @@ run_corrupt_variant() {
         missing) ;;
         empty) touch "$CORRUPT_SUBDIR/settings.dat" ;;
         truncated_header) printf 'PAW' > "$CORRUPT_SUBDIR/settings.dat" ;;
-        wrong_magic) printf 'BAAD\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x07\x03\x00' > "$CORRUPT_SUBDIR/settings.dat" ;;
-        wrong_version) printf 'PAWS\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x07\x03\x00' > "$CORRUPT_SUBDIR/settings.dat" ;;
-        invalid_theme) printf 'PAWS\x01\x99\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x07\x03\x00' > "$CORRUPT_SUBDIR/settings.dat" ;;
-        invalid_bool) printf 'PAWS\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x01\x00\x07\x03\x00' > "$CORRUPT_SUBDIR/settings.dat" ;;
-        oversized) printf 'PAWS\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x07\x03\x00EXTRA_BYTES' > "$CORRUPT_SUBDIR/settings.dat" ;;
+        truncated_v1) printf 'PAWS\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x07' > "$CORRUPT_SUBDIR/settings.dat" ;;
+        truncated_v2) printf 'PAWS\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x07\x03\x00\x01\x00' > "$CORRUPT_SUBDIR/settings.dat" ;;
+        wrong_magic) printf 'BAAD\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x07\x03\x00\x01\x00\x00\x00\x00\x00\x00\x00' > "$CORRUPT_SUBDIR/settings.dat" ;;
+        wrong_version) printf 'PAWS\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x07\x03\x00\x01\x00\x00\x00\x00\x00\x00\x00' > "$CORRUPT_SUBDIR/settings.dat" ;;
+        invalid_theme) python3 -c "open('$CORRUPT_SUBDIR/settings.dat', 'wb').write(b'PAWS\x02\x99' + bytes(42))" ;;
+        invalid_bool) python3 -c "open('$CORRUPT_SUBDIR/settings.dat', 'wb').write(b'PAWS\x02\x00' + bytes(24) + bytes([5, 1, 0, 7, 3, 0, 1, 0]) + bytes(6))" ;;
+        invalid_coat) python3 -c "open('$CORRUPT_SUBDIR/settings.dat', 'wb').write(b'PAWS\x02\x00' + bytes(24) + bytes([1, 1, 0, 7, 3, 0, 1, 99]) + bytes(6))" ;;
+        oversized_v1) printf 'PAWS\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x07\x03\x00EXTRA_BYTES' > "$CORRUPT_SUBDIR/settings.dat" ;;
+        oversized_v2) python3 -c "open('$CORRUPT_SUBDIR/settings.dat', 'wb').write(b'PAWS\x02\x00' + bytes(42) + b'EXTRA_BYTES')" ;;
     esac
 
     tmux send-keys -t "$TMUX_CORRUPT" "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
@@ -840,15 +844,16 @@ run_corrupt_variant() {
     tmux send-keys -t "$TMUX_CORRUPT" "Q"
     sleep 0.4
 
-    if [ ! -f "$CORRUPT_SUBDIR/settings.dat" ] || [ "$(stat -c %s "$CORRUPT_SUBDIR/settings.dat")" -ne 24 ]; then
+    if [ ! -f "$CORRUPT_SUBDIR/settings.dat" ] || [ "$(stat -c %s "$CORRUPT_SUBDIR/settings.dat")" -ne 48 ]; then
         CORRUPT_ALL_OK=0
         return 1
     fi
     return 0
 }
 
-for var in missing empty truncated_header wrong_magic wrong_version invalid_theme invalid_bool oversized; do
+for var in missing empty truncated_header truncated_v1 truncated_v2 wrong_magic wrong_version invalid_theme invalid_bool invalid_coat oversized_v1 oversized_v2; do
     if ! run_corrupt_variant "$var"; then
+        CORRUPT_ALL_OK=0
         break
     fi
 done
@@ -856,7 +861,7 @@ tmux kill-session -t "$TMUX_CORRUPT" 2>/dev/null || true
 rm -rf "$CORRUPT_SUBDIR"
 
 if [ "$CORRUPT_ALL_OK" -eq 1 ]; then
-    pass "Scenario 24 - Malformed settings variants safely handled with defaults and 24-byte save"
+    pass "Scenario 24 - Malformed settings variants safely handled with defaults and 48-byte save"
 else
     fail "Scenario 24 - Corrupted settings fallback failed"
 fi
@@ -1305,6 +1310,113 @@ if [ "$DEMO_OK" -eq 1 ]; then
     pass "Scenario 33 - Rendering demo renders via Ctrl+G, single-write flush verified, clean menu return"
 else
     fail "Scenario 33 - Rendering demo failed (seen=$DEMO_SEEN, restored=$MENU_RESTORED)"
+fi
+
+# -----------------------------------------------------------------------------
+# Scenario 34: settings.dat v1-to-v2 Migration, Coat Customization & Editor Groups (Task G2)
+# -----------------------------------------------------------------------------
+MIG_SUBDIR="$TMP_DIR/mig_test"
+mkdir -p "$MIG_SUBDIR"
+cp "$BIN" "$MIG_SUBDIR/pawmodoro"
+
+# 1. Write a valid 24-byte Version 1 settings.dat:
+# magic 'PAWS' (4), version 1 (1), theme 1 (1, Matcha Latte), custom palette (12),
+# anim 1 (1), sound 1 (1), charset 0 (1), notify 1 (1), notify_layers 0x1F (1), volume 2 (1) = 24 bytes
+python3 -c "
+magic = b'PAWS'
+v1_bytes = magic + bytes([1, 1]) + bytes(range(10, 22)) + bytes([1, 1, 0, 1, 0x1F, 2])
+assert len(v1_bytes) == 24
+open('$MIG_SUBDIR/settings.dat', 'wb').write(v1_bytes)
+"
+
+TMUX_MIG="paw_mig_$$"
+tmux new-session -d -s "$TMUX_MIG" -x 80 -y 24 -c "$MIG_SUBDIR" bash
+tmux send-keys -t "$TMUX_MIG" "./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+sleep 0.5
+
+MIG_OK=0
+if tmux capture-pane -t "$TMUX_MIG" -p | grep -q "P A W M O D O R O"; then
+    # Open Settings
+    tmux send-keys -t "$TMUX_MIG" "5"
+    sleep 0.4
+    CAP_S=$(tmux capture-pane -t "$TMUX_MIG" -p)
+    # Check that Matcha Latte theme loaded and default coat Orange Tabby displayed
+    if echo "$CAP_S" | grep -q "Matcha Latte" && echo "$CAP_S" | grep -q "Orange Tabby"; then
+        # Navigate down to Cat coat (row 2: Down, Down) and change coat to Gray Tabby (Right)
+        tmux send-keys -t "$TMUX_MIG" Down
+        sleep 0.2
+        tmux send-keys -t "$TMUX_MIG" Down
+        sleep 0.2
+        tmux send-keys -t "$TMUX_MIG" Right
+        sleep 0.3
+        CAP_COAT=$(tmux capture-pane -t "$TMUX_MIG" -p)
+        if echo "$CAP_COAT" | grep -q "Gray Tabby"; then
+            # Open color editor: Navigate Up to row 1 (Customize colors), press Enter
+            tmux send-keys -t "$TMUX_MIG" Up
+            sleep 0.2
+            tmux send-keys -t "$TMUX_MIG" Enter
+            sleep 0.4
+            CAP_ED=$(tmux capture-pane -t "$TMUX_MIG" -p)
+            # Verify [Interface] tab active, then switch to [Art] via ']'
+            if echo "$CAP_ED" | grep -q "Interface"; then
+                tmux send-keys -t "$TMUX_MIG" "]"
+                sleep 0.3
+                CAP_ART=$(tmux capture-pane -t "$TMUX_MIG" -p)
+                if echo "$CAP_ART" | grep -q "Art" && echo "$CAP_ART" | grep -qi "Fur"; then
+                    # Edit art slot with Right arrow (+1) -> automatically sets coat to Custom
+                    tmux send-keys -t "$TMUX_MIG" Right
+                    sleep 0.3
+                    CAP_CUST=$(tmux capture-pane -t "$TMUX_MIG" -p)
+                    if echo "$CAP_CUST" | grep -q "Custom"; then
+                        # Return to Settings, verify Custom coat, return to menu, quit
+                        tmux send-keys -t "$TMUX_MIG" "B"
+                        sleep 0.2
+                        tmux send-keys -t "$TMUX_MIG" "B"
+                        sleep 0.2
+                        tmux send-keys -t "$TMUX_MIG" "Q"
+                        sleep 0.4
+
+                        # Verify settings.dat was upgraded to exactly 48 bytes v2
+                        if [ -f "$MIG_SUBDIR/settings.dat" ]; then
+                            SAVED_SIZE=$(stat -c %s "$MIG_SUBDIR/settings.dat")
+                            if [ "$SAVED_SIZE" -eq 48 ]; then
+                                # Audit binary layout with python
+                                python3 -c "
+data = open('$MIG_SUBDIR/settings.dat', 'rb').read()
+assert len(data) == 48, f'Wrong length: {len(data)}'
+assert data[:4] == b'PAWS', 'Wrong magic'
+assert data[4] == 2, f'Wrong version: {data[4]}'
+assert data[36] == 1, f'Wrong mouse: {data[36]}'
+assert data[37] == 6, f'Wrong coat (expected 6 Custom): {data[37]}'
+"
+                                if [ $? -eq 0 ]; then
+                                    MIG_OK=1
+                                fi
+                            fi
+                        fi
+                    else
+                        echo "DEBUG: CAP_CUST failed to show Custom: $CAP_CUST"
+                    fi
+                else
+                    echo "DEBUG: CAP_ART failed to show Art & Fur: $CAP_ART"
+                fi
+            else
+                echo "DEBUG: CAP_ED failed to show Interface: $CAP_ED"
+            fi
+        else
+            echo "DEBUG: CAP_COAT failed to show Gray Tabby: $CAP_COAT"
+        fi
+    else
+        echo "DEBUG: CAP_S failed to show Matcha Latte and Orange Tabby: $CAP_S"
+    fi
+fi
+tmux kill-session -t "$TMUX_MIG" 2>/dev/null || true
+rm -rf "$MIG_SUBDIR"
+
+if [ "$MIG_OK" -eq 1 ]; then
+    pass "Scenario 34 - settings.dat v1-to-v2 migration, coat presets, editor grouping, and custom auto-switch"
+else
+    fail "Scenario 34 - settings.dat migration or coat persistence failed"
 fi
 
 

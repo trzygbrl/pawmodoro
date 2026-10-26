@@ -415,11 +415,12 @@ ui_frame_row:
     mov al, CHAR_PIPE
     call buf_char
 .row_l_done:
-    mov esi, ansi_reset
-    call buf_str
-
-    ; 3. Emit ESC[K (erase to end of line)
+    ; Erase row interior with theme background color
+    mov al, SLOT_BG
+    call ui_bgcolor
     mov esi, ansi_erase_eol
+    call buf_str
+    mov esi, ansi_reset
     call buf_str
 
     ; 4. Move directly to frame right border column ui_w
@@ -555,7 +556,11 @@ ui_layout_update:
     je .record_seen
 
 .dim_changed:
+    mov al, SLOT_BG
+    call ui_bgcolor
     mov esi, ansi_clear
+    call buf_str
+    mov esi, ansi_reset
     call buf_str
 
 .record_seen:
@@ -639,7 +644,11 @@ ui_draw_menu:
     mov eax, UI_MENU_ROW_BELOW
     mov ebx, 1
     call buf_goto
+    mov al, SLOT_BG
+    call ui_bgcolor
     mov esi, ansi_erase_eos
+    call buf_str
+    mov esi, ansi_reset
     call buf_str
 
     ; -------------------------------------------------------------------------
@@ -1149,7 +1158,11 @@ ui_size_gate:
 
 .gate_recovered:
     ; Append ansi_clear so subsequent normal frame redraw clears warning text
+    mov al, SLOT_BG
+    call ui_bgcolor
     mov esi, ansi_clear
+    call buf_str
+    mov esi, ansi_reset
     call buf_str
 
 .gate_done:

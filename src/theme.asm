@@ -17,7 +17,7 @@
 ;            the active palette's slot ID to the frame buffer (out_buf).
 ;            If the slot ID is invalid (AL >= NUM_SLOTS), appends nothing and
 ;            returns safely without altering the output buffer.
-; IN:        AL = Slot ID (0..11, SLOT_*)
+; IN:        AL = Slot ID (0..NUM_SLOTS-1, SLOT_*)
 ; OUT:       None (appends foreground escape sequence to out_buf)
 ; CLOBBERS:  None (preserves all general-purpose registers and EFLAGS)
 ;=============================================================================
@@ -30,7 +30,7 @@ ui_color:
     push esi
     push edi
 
-    ; Validate slot ID in AL (must be strictly < NUM_SLOTS = 12)
+    ; Validate slot ID in AL (must be strictly < NUM_SLOTS)
     cmp al, NUM_SLOTS
     jae .color_invalid          ; Out-of-bounds slot ID: silently drop
 
@@ -66,7 +66,7 @@ ui_color:
 ;            Used for highlighted selections and active status backgrounds.
 ;            If the slot ID is invalid (AL >= NUM_SLOTS), appends nothing and
 ;            returns safely without altering the output buffer.
-; IN:        AL = Slot ID (0..11, SLOT_*)
+; IN:        AL = Slot ID (0..NUM_SLOTS-1, SLOT_*)
 ; OUT:       None (appends background escape sequence to out_buf)
 ; CLOBBERS:  None (preserves all general-purpose registers and EFLAGS)
 ;=============================================================================
@@ -79,7 +79,7 @@ ui_bgcolor:
     push esi
     push edi
 
-    ; Validate slot ID in AL (must be strictly < NUM_SLOTS = 12)
+    ; Validate slot ID in AL (must be strictly < NUM_SLOTS)
     cmp al, NUM_SLOTS
     jae .bgcolor_invalid        ; Out-of-bounds slot ID: silently drop
 

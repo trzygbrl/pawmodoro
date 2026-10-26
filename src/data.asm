@@ -437,26 +437,74 @@ section .data
     path_settings:              db "settings.dat", CHAR_NULL
 
     ; -------------------------------------------------------------------------
-    ; 7 Built-in Theme Palettes (Task V4, PRD_V2 §4)
-    ; Exactly 12 bytes each in normative slot order:
+    ; 7 Built-in Theme Palettes (Task V4 & G2, PRD_V2 §4, PRD_V3 §5)
+    ; Exactly 24 bytes each in normative slot order 0..23:
     ; 0:BORDER, 1:TITLE, 2:ACCENT, 3:TEXT, 4:DIM, 5:OK, 6:WARN, 7:ERR, 8:CAT,
-    ; 9:BAR_FULL, 10:BAR_EMPTY, 11:HIGHLIGHT
+    ; 9:BAR_FULL, 10:BAR_EMPTY, 11:HIGHLIGHT, 12:BG, 13:SURFACE, 14:SURFACE_ALT,
+    ; 15:BORDER_FOCUS, 16:TITLE_ALT, 17:TEXT_INV, 18:FUR, 19:FUR_SHADE,
+    ; 20:FUR_STRIPE, 21:EAR_BLUSH, 22:OUTLINE, 23:EYE_NOSE
     ; -------------------------------------------------------------------------
     themes_table:
-        ; Theme 0: Strawberry Milk (default warm look)
+        ; Theme 0: Strawberry Milk (default warm look per reference image & PRD_V3 §5.2)
         db 211, 204, 218, 254, 244, 114, 221, 203, 223, 204, 238, 53
+        db 234, 235, 236, 211, 218, 234, 216, 173, 137, 211, 52,  233
         ; Theme 1: Matcha Latte
         db 108, 150, 114, 255, 243, 114, 221, 203, 180, 114, 238, 22
+        db 233, 234, 235, 150, 114, 234, 223, 180, 137, 218, 233, 232
         ; Theme 2: Blueberry
         db 69,  111, 75,  255, 244, 114, 221, 203, 117, 75,  238, 17
+        db 233, 234, 235, 111, 75,  234, 249, 245, 240, 218, 233, 232
         ; Theme 3: Lavender Night
         db 141, 183, 147, 253, 243, 114, 221, 203, 225, 141, 237, 54
+        db 234, 235, 236, 183, 147, 234, 225, 183, 141, 218, 233, 232
         ; Theme 4: Sunset Peach
         db 215, 209, 216, 255, 244, 114, 221, 203, 223, 209, 238, 94
+        db 234, 235, 236, 215, 209, 234, 216, 173, 137, 211, 52,  233
         ; Theme 5: Mono Cozy
         db 245, 255, 250, 252, 240, 250, 255, 255, 252, 255, 238, 240
+        db 232, 235, 238, 255, 250, 232, 252, 245, 240, 250, 232, 232
         ; Theme 6: High Contrast
         db 231, 231, 226, 231, 250, 46,  226, 196, 231, 231, 240, 21
+        db 16,  233, 235, 226, 231, 16,  231, 250, 240, 226, 16,  16
+
+    ; -------------------------------------------------------------------------
+    ; 7 Cat Coat Presets (Task G2, PRD_V3 §5.3)
+    ; Each preset provides 4 bytes overriding slots 18..21:
+    ; SLOT_FUR, SLOT_FUR_SHADE, SLOT_FUR_STRIPE, SLOT_EAR_BLUSH
+    ; -------------------------------------------------------------------------
+    coat_table:
+        ; Preset 0: Orange Tabby (Default)
+        db 216, 173, 137, 211
+        ; Preset 1: Gray Tabby
+        db 249, 245, 240, 218
+        ; Preset 2: Black Cat
+        db 235, 233, 237, 211
+        ; Preset 3: White Cat
+        db 255, 251, 253, 218
+        ; Preset 4: Cream / Calico
+        db 223, 216, 173, 211
+        ; Preset 5: Tuxedo
+        db 234, 232, 255, 211
+        ; Preset 6: Custom coat placeholder
+        db 0,   0,   0,   0
+
+    ; Coat Name Strings and Pointer Table
+    coat_name_0:                db "Orange Tabby", CHAR_NULL
+    coat_name_1:                db "Gray Tabby", CHAR_NULL
+    coat_name_2:                db "Black", CHAR_NULL
+    coat_name_3:                db "White", CHAR_NULL
+    coat_name_4:                db "Cream", CHAR_NULL
+    coat_name_5:                db "Tuxedo", CHAR_NULL
+    coat_name_6:                db "Custom", CHAR_NULL
+
+    coat_names:
+        dd coat_name_0
+        dd coat_name_1
+        dd coat_name_2
+        dd coat_name_3
+        dd coat_name_4
+        dd coat_name_5
+        dd coat_name_6
 
     ; Theme Name Strings and Pointer Table (for all 8 themes including Custom)
     theme_name_0:               db "Strawberry Milk", CHAR_NULL
@@ -478,14 +526,16 @@ section .data
         dd theme_name_6
         dd theme_name_7
 
-    ; Active 12-byte Palette read by ui_color and ui_bgcolor
-    ; Initialized to Strawberry Milk palette
+    ; Active 24-byte Palette read by ui_color and ui_bgcolor
+    ; Initialized to Strawberry Milk palette (24 bytes)
     active_palette:
         db 211, 204, 218, 254, 244, 114, 221, 203, 223, 204, 238, 53
+        db 234, 235, 236, 211, 218, 234, 216, 173, 137, 211, 52,  233
 
-    ; Persisted 12-byte Custom Palette (separate from built-ins, default copy of Strawberry Milk)
+    ; Persisted 24-byte Custom Palette (default copy of Strawberry Milk)
     custom_palette:
         db 211, 204, 218, 254, 244, 114, 221, 203, 223, 204, 238, 53
+        db 234, 235, 236, 211, 218, 234, 216, 173, 137, 211, 52,  233
 
     ; In-Memory Settings State Variables (.data initialized to defaults)
     setting_theme:              db 0            ; Active theme index (0..7)
@@ -495,14 +545,17 @@ section .data
     setting_notify:             db 0            ; Notification master flag (0 or 1)
     setting_notify_layers:      db 0x01         ; Notification layer bitmask (b0 = bell)
     setting_volume:             db 2            ; Volume (0..3)
+    setting_mouse:              db 1            ; Mouse enabled flag (0 or 1, default 1)
+    setting_coat:               db 0            ; Cat coat preset index (0..6, default 0)
+    setting_reserved:           times 6 db 0    ; Reserved bytes (MUST be 0)
     settings_save_err:          db 0            ; Save failure flag (0 = OK, 1 = failure)
 
 section .bss
 
-    settings_buf:               resb 32
+    settings_buf:               resb 64
 
 ; =============================================================================
-; Task V5 Settings Screen UI Strings and State Variables (PRD_V2 §4, §5, §6)
+; Task V5 & G2 Settings Screen UI Strings and State Variables (PRD_V2 §4, §5, PRD_V3 §5)
 ; =============================================================================
 section .data
 
@@ -510,14 +563,31 @@ section .data
     title_settings:             db "SETTINGS", CHAR_NULL
     title_settings_colors:      db "SETTINGS - CUSTOMIZE COLORS", CHAR_NULL
 
-    ; Setting row labels (7 rows)
+    ; Setting row labels (8 rows)
     settings_lbl_theme:         db "Theme", CHAR_NULL
     settings_lbl_customize:     db "Customize colors", CHAR_NULL
+    settings_lbl_coat:          db "Cat coat", CHAR_NULL
     settings_lbl_anim:          db "Animations", CHAR_NULL
     settings_lbl_sound:         db "Sound & Volume", CHAR_NULL
     settings_lbl_charset:       db "Charset", CHAR_NULL
     settings_lbl_notify:        db "Terminal integration", CHAR_NULL
     settings_lbl_reset:         db "Reset to defaults", CHAR_NULL
+
+    ; Placeholder cat for Cat coat row sample
+    cat_placeholder_l1:         db " /\\_/\\ ", CHAR_NULL
+    cat_placeholder_l2:         db "( o.o )", CHAR_NULL
+
+    ; Color Editor Group Headers and Hints
+    color_lbl_group_interface:  db "[Interface]   Art      ", CHAR_NULL
+    color_lbl_group_art:        db " Interface   [Art]     ", CHAR_NULL
+    color_group_hint:           db " (Tab / [ / ])", CHAR_NULL
+    color_coat_lbl_prefix:      db "Active coat: < ", CHAR_NULL
+    color_coat_lbl_suffix:      db " >", CHAR_NULL
+    color_coat_edit_note:       db "(Art edits set Coat to Custom)", CHAR_NULL
+
+    ; Color Editor Navigation State
+    settings_color_group:       dd 0            ; 0 = Interface (0..17), 1 = Art (18..23)
+    settings_color_scroll:      dd 0            ; Scroll offset for Interface group (0..3)
 
     ; Values and status strings
     settings_val_on:            db "ON", CHAR_NULL
@@ -542,29 +612,44 @@ section .data
     settings_sample_warn:       db "[WARN] ", CHAR_NULL
     settings_sample_err:        db "[ERR]", CHAR_NULL
 
-    ; Slot names for color editor
-    slot_name_0:                db " 0: BORDER   ", CHAR_NULL
-    slot_name_1:                db " 1: TITLE    ", CHAR_NULL
-    slot_name_2:                db " 2: ACCENT   ", CHAR_NULL
-    slot_name_3:                db " 3: TEXT     ", CHAR_NULL
-    slot_name_4:                db " 4: DIM      ", CHAR_NULL
-    slot_name_5:                db " 5: OK       ", CHAR_NULL
-    slot_name_6:                db " 6: WARN     ", CHAR_NULL
-    slot_name_7:                db " 7: ERR      ", CHAR_NULL
-    slot_name_8:                db " 8: CAT      ", CHAR_NULL
-    slot_name_9:                db " 9: BAR_FULL ", CHAR_NULL
-    slot_name_10:               db "10: BAR_EMPTY", CHAR_NULL
-    slot_name_11:               db "11: HIGHLIGHT", CHAR_NULL
+    ; Slot names for all 24 slots in color editor
+    slot_name_0:                db " 0: BORDER      ", CHAR_NULL
+    slot_name_1:                db " 1: TITLE       ", CHAR_NULL
+    slot_name_2:                db " 2: ACCENT      ", CHAR_NULL
+    slot_name_3:                db " 3: TEXT        ", CHAR_NULL
+    slot_name_4:                db " 4: DIM         ", CHAR_NULL
+    slot_name_5:                db " 5: OK          ", CHAR_NULL
+    slot_name_6:                db " 6: WARN        ", CHAR_NULL
+    slot_name_7:                db " 7: ERR         ", CHAR_NULL
+    slot_name_8:                db " 8: CAT         ", CHAR_NULL
+    slot_name_9:                db " 9: BAR_FULL    ", CHAR_NULL
+    slot_name_10:               db "10: BAR_EMPTY   ", CHAR_NULL
+    slot_name_11:               db "11: HIGHLIGHT   ", CHAR_NULL
+    slot_name_12:               db "12: BG          ", CHAR_NULL
+    slot_name_13:               db "13: SURFACE     ", CHAR_NULL
+    slot_name_14:               db "14: SURFACE_ALT ", CHAR_NULL
+    slot_name_15:               db "15: BORDER_FOCUS", CHAR_NULL
+    slot_name_16:               db "16: TITLE_ALT   ", CHAR_NULL
+    slot_name_17:               db "17: TEXT_INV    ", CHAR_NULL
+    slot_name_18:               db "18: FUR         ", CHAR_NULL
+    slot_name_19:               db "19: FUR_SHADE   ", CHAR_NULL
+    slot_name_20:               db "20: FUR_STRIPE  ", CHAR_NULL
+    slot_name_21:               db "21: EAR_BLUSH   ", CHAR_NULL
+    slot_name_22:               db "22: OUTLINE     ", CHAR_NULL
+    slot_name_23:               db "23: EYE_NOSE    ", CHAR_NULL
 
     slot_names:
-        dd slot_name_0, slot_name_1, slot_name_2, slot_name_3
-        dd slot_name_4, slot_name_5, slot_name_6, slot_name_7
-        dd slot_name_8, slot_name_9, slot_name_10, slot_name_11
+        dd slot_name_0,  slot_name_1,  slot_name_2,  slot_name_3
+        dd slot_name_4,  slot_name_5,  slot_name_6,  slot_name_7
+        dd slot_name_8,  slot_name_9,  slot_name_10, slot_name_11
+        dd slot_name_12, slot_name_13, slot_name_14, slot_name_15
+        dd slot_name_16, slot_name_17, slot_name_18, slot_name_19
+        dd slot_name_20, slot_name_21, slot_name_22, slot_name_23
 
     ; Key help strings
     settings_help_main:         db "[Up/Down] Select   [Left/Right] Change   [Enter] Edit/Toggle   [B/Esc] Back", CHAR_NULL
     settings_help_notify:       db "[Enter/Space] Master ON/OFF   [1-5] Toggle Layer   [B/Esc] Back", CHAR_NULL
-    settings_help_colors:       db "[Up/Down] Slot  [Left/Right] +/-1  [PgUp/PgDn] +/-16  [B/Esc] Back", CHAR_NULL
+    settings_help_colors:       db "Up/Down:Slot  Left/Right:+-1  PgUp/PgDn:+-16  Tab/[,]:Group  B/Esc:Back", CHAR_NULL
     settings_help_confirm:      db "[Y] Confirm reset   [N/Esc/B] Cancel", CHAR_NULL
 
     ; Sound & Volume helpers

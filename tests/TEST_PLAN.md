@@ -191,6 +191,14 @@ For manual test cases:
 | TC-125 | Rectangle fill primitive with ECH and space-fill fallback (`gfx_fill_rect`) (PRD_V3 §7) | O4, O5 | Rect fill with ECH=1 and ECH=0 | 1. Fill rect with `term_has_ech=1`<br>2. Fill rect with `term_has_ech=0`<br>3. Test coordinate bounds clipping | ECH mode emits `ESC[<w>X` per row. Fallback mode emits space loop via `buf_repeat`. Out-of-bounds coordinates clamped safely to `ui_w`/`ui_h`. | Verified: ECH and fallback space-fill paths both succeed with 0 overflow | PASS |
 | TC-126 | Horizontal and vertical line primitives with UTF-8 and ASCII fallbacks (PRD_V3 §8) | O4, O5 | Lines drawn in UTF-8 and ASCII modes | 1. Call `gfx_hline` and `gfx_vline` with `charset=0`<br>2. Call with `charset=1` (ASCII) | UTF-8 mode emits box characters `─` and `│`. ASCII mode emits `-` and `|`. Lines clamped to terminal dimensions. | Verified: lines render with approved UTF-8 glyphs and ASCII fallbacks | PASS |
 | TC-127 | Text clipping wrapper (`gfx_text_clip`) and frame accounting (`gfx_frame_bytes`) (PRD_V3 §9, §10, §11) | O4, O5 | Text clipping and demo execution via Ctrl+G | 1. Clip 80-char string to 24 display columns<br>2. Launch demo via Ctrl+G<br>3. Measure frame bytes in `buf_flush` | Long string safely clipped with `~` marker. Demo frame renders with exactly 1 `sys_write`. `gfx_frame_bytes` accurately records flushed byte count (< 16384). | Verified: single sys_write per frame, demo frame 4,643 bytes < 16384 | PASS |
+| TC-128 | 24-slot extended theme model and dark surfaces (PRD_V3 §5.1, §5.2) | O4, O5 | Built binary `build/pawmodoro` | 1. Verify `NUM_SLOTS == 24`<br>2. Check all 7 built-in themes in `themes_table`<br>3. Verify dark background and surface values | All 7 themes have 24 palette entries each. Slots 0..11 untouched; slots 12..23 provide dark background, panel surfaces, focus accents, and cat art colors. Strawberry Milk uses dark warm palette. | Verified: 24 slots across all 7 themes; Theme 0 matches reference | PASS |
+| TC-129 | Cat coat presets and art slot override (PRD_V3 §5.3) | O4, O5 | In-memory palette and `coat_table` | 1. Apply coat presets 0..5<br>2. Verify slots 18..21 overwritten<br>3. Verify slots 0..17 and 22..23 untouched | Presets 0..5 override only slots 18..21 (FUR, FUR_SHADE, FUR_STRIPE, EAR_BLUSH). Theme outline and eye/nose colors preserved. Interface slots 0..17 unchanged. | Verified: coat presets override exactly slots 18..21 | PASS |
+| TC-130 | Settings UI Cat coat row and cyclic navigation (PRD_V3 §5.4, §6.1) | O5 | Settings screen active | 1. Navigate to row 2 `Cat coat`<br>2. Cycle with Left and Right arrows | Left/Right wraps smoothly across all 7 coats (0..6). Immediate save triggered. Palette applied instantaneously. | Verified: cyclic 7-coat navigation and immediate save | PASS |
+| TC-131 | Live placeholder cat sample rendering (PRD_V3 §5.3, §5.4) | O5 | Settings screen active | 1. Inspect live sample cat on Cat coat row | 2-line ASCII cat `/\_/\` / `( o.o )` renders in current coat fur color (`SLOT_FUR`) and eye color (`SLOT_EYE_NOSE`). Zero emoji used. | Verified: placeholder cat rendered in coat fur/eye colors | PASS |
+| TC-132 | Color Editor Interface and Art grouping (PRD_V3 §5.5) | O5 | Color editor active | 1. Verify `[Interface]` active (slots 0..17)<br>2. Press `]` to switch to `[Art]` (slots 18..23)<br>3. Press `[` for Interface, `Tab` to toggle | Group switching is instantaneous. Up/Down navigation stays strictly within active group bounds. Scrolling window handles all 18 interface slots cleanly at 80x24. | Verified: group switching via Tab, `[`, `]` and boundary clamping | PASS |
+| TC-133 | Art slot editing automatic Custom coat transition (PRD_V3 §5.3, §5.5) | O4, O5 | Color editor Art group active | 1. Select any slot 18..23<br>2. Adjust color with Left/Right or PgUp/PgDn | Setting coat automatically switches to Custom (6). Interface slot edits (0..17) do not alter coat setting. Custom art edits preserved. | Verified: art edit sets coat to Custom; interface edits do not | PASS |
+| TC-134 | settings.dat v1-to-v2 transparent migration (PRD_V3 §6.2) | O4, O5 | Valid 24-byte v1 `settings.dat` on disk | 1. Launch Pawmodoro<br>2. Inspect loaded theme, flags, and coat<br>3. Mutate setting and quit | Valid v1 file accepted: loads theme, custom palette, and flags. New v2 fields receive documented defaults (`coat=0`, `mouse=1`). Next save writes clean 48-byte v2 file. | Verified: v1 migrated transparently, subsequent save writes 48B v2 | PASS |
+| TC-135 | Strict settings.dat v2 validation and atomic recovery (PRD_V3 §6.1, §6.3) | O4, O5 | Malformed file variants | 1. Test missing, empty, truncated v1/v2, wrong magic, v3 version, invalid theme/coat/flags/reserved, oversized v1/v2 | All malformed variants rejected atomically. Complete documented defaults retained without partial state corruption. Next change saves valid 48-byte v2 file. | Verified: all malformed variants fall back to defaults and save 48B v2 | PASS |
 
 ---
 
@@ -216,14 +224,14 @@ The automated smoke test script (`tests/smoke.sh`) provides headless regression 
 | Check 14: Non-TTY Stdin Rejection (Exit 1) | TC-05 |
 | Check 15: Terminal Size Gate (< 80x24) & Auto-Recovery | TC-06, TC-07, TC-70 |
 | Check 16: Zero Screen Overflow (> ui_w Columns) | TC-42, TC-46 |
-| Check 17: Settings Navigation, Color Editor, Immediate Save & 24B Check | TC-54, TC-55 |
+| Check 17: Settings Navigation, Cat coat, Color Editor, Immediate Save & 48B Check | TC-54, TC-55, TC-130 |
 | Check 18: Cohesive Visual Elements (Greeting, Daily Tip, Cycle Dots, [PAUSED] Badge) | TC-57, TC-58 |
 | Check 19: Strict 7-bit ASCII Fallback (Zero Bytes >= 0x80 across 5 Screens) | TC-59 |
 | Check 20: UTF-8 Rounded Border Geometry (╭, ╰, ─, │ across 5 Screens) | TC-60 |
 | Check 21: Animation Write Throttling (<= 5 fps) & Reduce Motion 0 Idle Writes | TC-61, TC-69, TC-71 |
 | Check 22: Synthesized Sound Engine, Pure Integer Purity, .bss Budget, Zero Zombies | TC-73, TC-74, TC-75, TC-80, TC-81, TC-82, TC-119 |
-| Check 23: Theme Persistence Across Restarts | TC-83, TC-84 |
-| Check 24: Corrupted settings.dat Fallback & Recovery | TC-85, TC-86, TC-87, TC-88, TC-89, TC-90, TC-91, TC-92 |
+| Check 23: Theme Persistence Across Restarts (48-byte v2) | TC-83, TC-84, TC-128 |
+| Check 24: Corrupted settings.dat Fallback & 48-byte Recovery | TC-85, TC-86, TC-87, TC-88, TC-89, TC-90, TC-91, TC-92, TC-135 |
 | Check 25: Journal Deletion & Cancellation | TC-93, TC-94, TC-95, TC-96, TC-97, TC-98, TC-112, TC-113 |
 | Check 26: Journal 200-char Entry Wrapping at 80x24 and 120x40 | TC-99, TC-100 |
 | Check 27: Strict 7-bit ASCII Mode Output Purity | TC-101, TC-102 |
@@ -233,4 +241,5 @@ The automated smoke test script (`tests/smoke.sh`) provides headless regression 
 | Check 31: Missing Audio Player Graceful Degradation & Zero Zombies | TC-108, TC-109, TC-117 |
 | Check 32: Render Core Buffer Overflow Diagnostic (All Screens, 80x24 and 120x40) | TC-120, TC-121, TC-122, TC-123, TC-125 |
 | Check 33: Render Core Demo Frame, Single Write, and Menu Return | TC-124, TC-126, TC-127 |
+| Check 34: settings.dat v1-to-v2 Migration, Coat Customization, Editor Groups & Auto-Switch | TC-129, TC-131, TC-132, TC-133, TC-134 |
 | Extended (`--full`): 4-Session Pomodoro Cycle | TC-20 |
