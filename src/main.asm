@@ -12,6 +12,7 @@
 %include "src/constants.inc"
 %include "src/macros.inc"
 %include "src/data.asm"
+%include "src/sprites.asm"
 
 ; =============================================================================
 ; TEXT SECTION (.text)
@@ -34,6 +35,7 @@ section .text
 %include "src/anim.asm"
 %include "src/sfx.asm"
 %include "src/gfx.asm"
+%include "src/sprite.asm"
 
 section .text
     global _start
@@ -210,8 +212,25 @@ _start:
     je .menu_to_g1_demo
 %endif
 
+%ifdef SPRITE_VIEWER_ENABLED
+    ; Ctrl+V -> Enter hidden sprite viewer (PRD_V3 §sprites)
+    cmp eax, KEY_CTRL_V
+    je .menu_to_sprite_viewer
+%endif
+
     ; Any other key is ignored: no redraw, no write!
     jmp .main_loop
+
+%ifdef SPRITE_VIEWER_ENABLED
+.menu_to_sprite_viewer:
+    call anim_reset_effects
+    call sprite_viewer_run
+    cmp dword [state], STATE_QUIT
+    je .handle_exit
+    mov dword [state], STATE_MENU
+    mov dword [need_redraw], 1
+    jmp .main_loop
+%endif
 
 %ifdef G1_DEMO_ENABLED
 .menu_to_g1_demo:

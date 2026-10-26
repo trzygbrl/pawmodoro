@@ -1419,6 +1419,80 @@ else
     fail "Scenario 34 - settings.dat migration or coat persistence failed"
 fi
 
+# -----------------------------------------------------------------------------
+# Scenario 35: Sprite Engine & Hidden Sprite Viewer Verification (Task G3)
+# -----------------------------------------------------------------------------
+VIEWER_SUBDIR="$TMP_DIR/viewer_test"
+mkdir -p "$VIEWER_SUBDIR"
+cp "$BIN" "$VIEWER_SUBDIR/pawmodoro"
+
+TMUX_VIEWER="paw_viewer_$$"
+VIEWER_STRACE="$VIEWER_SUBDIR/viewer_strace.log"
+tmux new-session -d -s "$TMUX_VIEWER" -x 80 -y 24 -c "$VIEWER_SUBDIR" bash
+tmux send-keys -t "$TMUX_VIEWER" "strace -f -e trace=write -o '$VIEWER_STRACE' ./pawmodoro; echo EXIT=\$? > exit.txt" Enter
+
+VIEWER_OK=0
+# Wait for menu to appear up to 5 seconds
+for i in $(seq 1 25); do
+    if tmux capture-pane -t "$TMUX_VIEWER" -p | grep -q "P A W M O D O R O"; then break; fi
+    sleep 0.2
+done
+
+if tmux capture-pane -t "$TMUX_VIEWER" -p | grep -q "P A W M O D O R O"; then
+    # Press Ctrl+V to enter sprite viewer
+    tmux send-keys -t "$TMUX_VIEWER" C-v
+    sleep 0.4
+    CAP_V1=$(tmux capture-pane -t "$TMUX_VIEWER" -p)
+    if echo "$CAP_V1" | grep -q "PAWMODORO SPRITE VIEWER" && echo "$CAP_V1" | grep -q "Logo Cat"; then
+        # Cycle theme (T) -> Matcha Latte
+        tmux send-keys -t "$TMUX_VIEWER" "T"
+        sleep 0.2
+        # Cycle coat (C) -> Gray Tabby
+        tmux send-keys -t "$TMUX_VIEWER" "C"
+        sleep 0.2
+        # Toggle ASCII mode (A)
+        tmux send-keys -t "$TMUX_VIEWER" "A"
+        sleep 0.3
+        CAP_ASCII=$(tmux capture-pane -t "$TMUX_VIEWER" -p)
+        # Verify ASCII Mode indicator and zero non-ASCII bytes
+        ASCII_CLEAN=0
+        if echo "$CAP_ASCII" | grep -q "ASCII Fallback"; then
+            if ! tmux capture-pane -t "$TMUX_VIEWER" -ep | grep -P "[\x80-\xFF]" >/dev/null; then
+                ASCII_CLEAN=1
+            fi
+        fi
+        if [ "$ASCII_CLEAN" -eq 1 ]; then
+            # Cycle fill slot (+)
+            tmux send-keys -t "$TMUX_VIEWER" "+"
+            sleep 0.2
+            # Test corner clipping (7 = Top-Left)
+            tmux send-keys -t "$TMUX_VIEWER" "7"
+            sleep 0.2
+            CAP_CLIP=$(tmux capture-pane -t "$TMUX_VIEWER" -p)
+            if echo "$CAP_CLIP" | grep -q "Top-Left (Corner Clipped)"; then
+                # Press Escape to return to menu
+                tmux send-keys -t "$TMUX_VIEWER" Escape
+                sleep 0.4
+                if tmux capture-pane -t "$TMUX_VIEWER" -p | grep -q "P A W M O D O R O"; then
+                    tmux send-keys -t "$TMUX_VIEWER" "Q"
+                    sleep 0.4
+                    if grep -q "EXIT=0" "$VIEWER_SUBDIR/exit.txt" 2>/dev/null; then
+                        VIEWER_OK=1
+                    fi
+                fi
+            fi
+        fi
+    fi
+fi
+tmux kill-session -t "$TMUX_VIEWER" 2>/dev/null || true
+rm -rf "$VIEWER_SUBDIR"
+
+if [ "$VIEWER_OK" -eq 1 ]; then
+    pass "Scenario 35 - Sprite viewer Ctrl+V, theme/coat cycle, ASCII purity, clipping, and clean return"
+else
+    fail "Scenario 35 - Sprite viewer verification failed"
+fi
+
 
 
 # -----------------------------------------------------------------------------

@@ -101,12 +101,31 @@ KEY_DELETE              equ 0x109       ; Delete (ESC [ 3 ~)
 
 CHAR_UPPER_X           equ 88          ; Uppercase letter X ('X', for ANSI ECH sequence ESC[<n>X)
 KEY_CTRL_G              equ 7           ; ASCII 7 (BEL / Ctrl+G, temporary G1 demo key)
+KEY_CTRL_V              equ 22          ; ASCII 22 (SYN / Ctrl+V, hidden sprite viewer key, PRD_V3 §sprites)
 GFX_SLOT_UNKNOWN        equ 0xFFFF      ; Sentinel value for untracked/unknown color slot ID
 
 ; G1 Rendering Core Demo Toggle (Assembly-time switch, PRD_V3 §11)
 %ifndef G1_DEMO_ENABLED
 %define G1_DEMO_ENABLED 1
 %endif
+
+; Sprite Engine & Hidden Viewer Toggle (Assembly-time switch, PRD_V3 §sprites)
+%ifndef SPRITE_VIEWER_ENABLED
+%define SPRITE_VIEWER_ENABLED 1
+%endif
+
+; Sprite Format & Encoding Constants (PRD_V3 §4.2)
+SPRITE_MAX_PALETTE      equ 15          ; Maximum mapped theme slots per sprite
+SPRITE_FRAME_END_SENTINEL equ 0         ; Frame RLE terminator sentinel (0x00)
+
+; Half-Block Unicode UTF-8 Byte Sequences (PRD_V3 §4.1)
+UTF8_HALF_UPPER_B1      equ 0xE2
+UTF8_HALF_UPPER_B2      equ 0x96
+UTF8_HALF_UPPER_B3      equ 0x80        ; U+2580 (▀)
+
+UTF8_HALF_LOWER_B1      equ 0xE2
+UTF8_HALF_LOWER_B2      equ 0x96
+UTF8_HALF_LOWER_B3      equ 0x84        ; U+2584 (▄)
 
 ; =============================================================================
 ; Memory Buffer Sizes (.bss Budget, PRD §6.5, PRD_V3 §4.1)
@@ -166,6 +185,7 @@ STATE_HABITS            equ 2           ; Habit tracker view/edit
 STATE_JOURNAL           equ 3           ; Journal view/add
 STATE_QUIT              equ 4           ; Application exit state
 STATE_SETTINGS          equ 5           ; Settings screen & color editor (PRD_V2 §6)
+STATE_VIEWER            equ 6           ; Hidden sprite viewer (PRD_V3 §sprites)
 
 ; =============================================================================
 ; Terminal & Key Processing Constants (Task 2 Additions)
