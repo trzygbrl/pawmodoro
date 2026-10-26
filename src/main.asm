@@ -36,6 +36,8 @@ section .text
 %include "src/sfx.asm"
 %include "src/gfx.asm"
 %include "src/sprite.asm"
+%include "src/layout.asm"
+%include "src/widgets.asm"
 
 section .text
     global _start
@@ -218,7 +220,20 @@ _start:
     je .menu_to_sprite_viewer
 %endif
 
+    ; Ctrl+L -> Enter hidden G6 layout & widget test screen
+    cmp eax, KEY_CTRL_L
+    je .menu_to_layout_test
+
     ; Any other key is ignored: no redraw, no write!
+    jmp .main_loop
+
+.menu_to_layout_test:
+    call anim_reset_effects
+    call layout_test_screen_run
+    cmp dword [state], STATE_QUIT
+    je .handle_exit
+    mov dword [state], STATE_MENU
+    mov dword [need_redraw], 1
     jmp .main_loop
 
 %ifdef SPRITE_VIEWER_ENABLED

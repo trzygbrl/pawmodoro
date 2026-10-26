@@ -245,8 +245,8 @@ UI_FRAME_INNER_WIDTH    equ 54          ; Legacy inner horizontal border width (
 UI_FRAME_COL_LEFT       equ 1           ; Frame-relative left border column
 UI_FRAME_COL_RIGHT      equ 56          ; Legacy right border column
 
-; V2 Adaptive Layout Constants (PRD v2 §2)
-UI_FRAME_MAX_WIDTH      equ 100         ; Maximum frame width in columns
+; V3 Adaptive Layout Constants (PRD_V3 §3.2)
+UI_FRAME_MAX_WIDTH      equ 120         ; Maximum frame width in columns (PRD_V3 §3.2)
 UI_FRAME_MARGIN_COLS    equ 2           ; Margin subtracted from term_cols (term_cols - 2)
 UI_CLIP_MARKER          equ CHAR_TILDE  ; '~' (0x7E) clipping marker for truncated text
 UI_TIMER_OFF_DEMO       equ 8           ; Offset from ui_w to [DEMO] badge column (ui_w - 8)
@@ -778,3 +778,55 @@ NOTIFY_REMINDER_TICKS   equ 600         ; 60 seconds at 100ms ticks = 600 ticks
 TASKBAR_STATE_CLEAR     equ 0           ; OSC 9;4 state 0: clear / no progress
 TASKBAR_STATE_RUNNING   equ 1           ; OSC 9;4 state 1: normal progress
 TASKBAR_STATE_PAUSED    equ 4           ; OSC 9;4 state 4: paused
+
+; =============================================================================
+; Task G6 Additions: Layout Tiers, Dashboard Regions & Widget System (PRD_V3 §3)
+; =============================================================================
+
+; Responsive Layout Tiers (PRD_V3 §3.1)
+TIER_COMPACT            equ 0           ; Width 80-99 cols OR height < 30 rows
+TIER_STANDARD           equ 1           ; Width 100-119 cols AND height 30-35 rows
+TIER_GRAND              equ 2           ; Width >= 120 cols AND height >= 36 rows
+
+; Named Dashboard Regions (G6 §3.A2)
+REGION_HEADER           equ 0           ; Header top area
+REGION_SIDEBAR          equ 1           ; Left sidebar panel
+REGION_MAIN             equ 2           ; Main content panel
+REGION_FOOTER           equ 3           ; Bottom status / keybar area
+REGION_CARD_POMO        equ 4           ; Today's progress mascot / stat card
+REGION_CARD_HABITS      equ 5           ; Habits progress slider card
+REGION_CARD_TIP         equ 6           ; Daily tip card
+REGION_CARD_JOURNAL_BTN equ 7           ; Quick journal action button
+REGION_CARD_JOURNAL     equ 8           ; Quick journal recent notes card
+REGION_COUNT            equ 9           ; Total named regions
+
+; Rectangle Structure Offsets (16 bytes per rect_t)
+RECT_ROW                equ 0           ; 1-based row coordinate (dword)
+RECT_COL                equ 4           ; 1-based column coordinate (dword)
+RECT_W                  equ 8           ; Width in terminal cells (dword)
+RECT_H                  equ 12          ; Height in terminal rows (dword)
+RECT_SIZE               equ 16          ; Total byte size of rectangle struct
+
+; Reusable Widget States & Flags (G6 §3.B)
+WDG_STATE_NORMAL        equ 0           ; Default unselected widget state
+WDG_STATE_FOCUSED       equ 1           ; Keyboard / mouse focused widget state
+WDG_STATE_PRESSED       equ 2           ; Actively triggered / clicked widget state
+
+; Widget Panel Flags
+WDG_PANEL_FLAG_NONE     equ 0           ; Plain rounded panel without decorations
+WDG_PANEL_FLAG_TAB      equ 1           ; Draw title tab on top border
+WDG_PANEL_FLAG_FOCUS    equ 2           ; Highlight border with SLOT_BORDER_FOCUS
+WDG_PANEL_FLAG_SHADOW   equ 4           ; Subtle drop shadow along right and bottom edges
+
+; Widget Toggle States
+WDG_TOGGLE_OFF          equ 0           ; Toggle switch OFF state
+WDG_TOGGLE_ON           equ 1           ; Toggle switch ON state
+
+; Keybar Entry Structure Offsets
+KEYBAR_ENTRY_KEY        equ 0           ; Pointer to key label string (e.g. "Q")
+KEYBAR_ENTRY_DESC       equ 4           ; Pointer to description string (e.g. "Quit")
+KEYBAR_ENTRY_PRIO       equ 8           ; Priority (0 = highest / always show, 1..3 = lower)
+KEYBAR_ENTRY_SIZE       equ 12          ; 12 bytes per keybar hint definition
+
+; Shortcut Keys
+KEY_CTRL_L              equ 12          ; ASCII 12 (FF / Ctrl+L, hidden G6 layout test screen)

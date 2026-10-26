@@ -407,12 +407,87 @@ section .bss
     term_cols:                  resd 1                      ; Cached terminal columns
     term_rows:                  resd 1                      ; Cached terminal rows
 
-    ; Adaptive UI layout variables (PRD v2 §2)
-    ui_w:                       resd 1                      ; Frame width in columns (min(term_cols - 2, 100))
+    ; Adaptive UI layout variables (PRD v2 §2, PRD_V3 §3.1)
+    ui_w:                       resd 1                      ; Frame width in columns (min(term_cols - 2, 120))
     ui_h:                       resd 1                      ; Terminal height in rows (term_rows)
     ui_col0:                    resd 1                      ; 0-based horizontal frame margin ((term_cols - ui_w) / 2)
     ui_seen_cols:               resd 1                      ; Last rendered terminal width for resize detection
     ui_seen_rows:               resd 1                      ; Last rendered terminal height for resize detection
+    layout_tier:                resd 1                      ; Active layout tier (TIER_COMPACT, TIER_STANDARD, TIER_GRAND)
+    layout_test_state:          resd 1                      ; G6 test screen active button state (0..2)
+
+    ; Widget library working variables (PRD_V3 §3, Task G6)
+    wdg_p_row:                  resd 1
+    wdg_p_col:                  resd 1
+    wdg_p_w:                    resd 1
+    wdg_p_h:                    resd 1
+    wdg_p_title:                resd 1
+    wdg_p_flags:                resd 1
+    wdg_p_border:               resd 1
+
+    wdg_b_row:                  resd 1
+    wdg_b_col:                  resd 1
+    wdg_b_w:                    resd 1
+    wdg_b_h:                    resd 1
+    wdg_b_icon:                 resd 1
+    wdg_b_label:                resd 1
+    wdg_b_state:                resd 1
+
+    wdg_t_row:                  resd 1
+    wdg_t_col:                  resd 1
+    wdg_t_w:                    resd 1
+    wdg_t_h:                    resd 1
+    wdg_t_label:                resd 1
+    wdg_t_state:                resd 1
+
+    wdg_pr_row:                 resd 1
+    wdg_pr_col:                 resd 1
+    wdg_pr_w:                   resd 1
+    wdg_pr_h:                   resd 1
+    wdg_pr_n:                   resd 1
+    wdg_pr_m:                   resd 1
+
+    wdg_st_row:                 resd 1
+    wdg_st_col:                 resd 1
+    wdg_st_w:                   resd 1
+    wdg_st_h:                   resd 1
+    wdg_st_val:                 resd 1
+    wdg_st_cap:                 resd 1
+
+    wdg_tip_r:                  resd 1
+    wdg_tip_c:                  resd 1
+    wdg_tip_w:                  resd 1
+    wdg_tip_h:                  resd 1
+    wdg_tip_body:               resd 1
+
+    wdg_lr_row:                 resd 1
+    wdg_lr_col:                 resd 1
+    wdg_lr_w:                   resd 1
+    wdg_lr_h:                   resd 1
+    wdg_lr_lbl:                 resd 1
+    wdg_lr_val:                 resd 1
+    wdg_lr_sel:                 resd 1
+
+    wdg_bd_row:                 resd 1
+    wdg_bd_col:                 resd 1
+    wdg_bd_w:                   resd 1
+    wdg_bd_h:                   resd 1
+    wdg_bd_lbl:                 resd 1
+    wdg_bd_fg:                  resd 1
+    wdg_bd_bg:                  resd 1
+
+    wdg_kb_row:                 resd 1
+    wdg_kb_col:                 resd 1
+    wdg_kb_w:                   resd 1
+    wdg_kb_h:                   resd 1
+    wdg_kb_tbl:                 resd 1
+
+    wdg_ck_row:                 resd 1
+    wdg_ck_col:                 resd 1
+    wdg_ck_w:                   resd 1
+    wdg_ck_h:                   resd 1
+    wdg_ck_lbl:                 resd 1
+    wdg_ck_state:               resd 1
 
     ; Main Menu Status Message Pointer and Style
     menu_msg:                   resd 1                      ; Pointer to status string (0 = none)
@@ -1119,6 +1194,62 @@ section .data
     settings_lbl_layer_3:       db " 3:Titl", CHAR_NULL
     settings_lbl_layer_4:       db " 4:Prog", CHAR_NULL
     settings_lbl_layer_5:       db " 5:Toast", CHAR_NULL
+
+    ; =========================================================================
+    ; Task G6 Layout & Widget Strings and Test Table (PRD_V3 §3, §10)
+    ; =========================================================================
+    str_g6_title:               db "PAWMODORO - G6 LAYOUT & WIDGET TEST", CHAR_NULL
+    str_g6_tier_compact:        db "[Compact 80x24]", CHAR_NULL
+    str_g6_tier_standard:       db "[Standard 100x30]", CHAR_NULL
+    str_g6_tier_grand:          db "[Grand 120x36+]", CHAR_NULL
+
+    str_g6_panel_title:         db " Panel Title ", CHAR_NULL
+    str_g6_card_title:          db " Daily Goal Card ", CHAR_NULL
+    str_g6_long_title:          db " A Very Long Title That Clips Gracefully ", CHAR_NULL
+
+    str_g6_btn_focus:           db "Start Focus", CHAR_NULL
+    str_g6_btn_habits:          db "Habits", CHAR_NULL
+    str_g6_btn_journal:         db "Journal", CHAR_NULL
+
+    str_g6_toggle_label:        db "Demo Mode", CHAR_NULL
+    str_g6_stat_caption:        db "Pomodoros Done", CHAR_NULL
+
+    str_g6_tip_sparkle:         db "Daily Tip", CHAR_NULL
+    str_g6_tip_body:            db "Small steps every day lead to big achievements! Take a quick pause and hydrate.", CHAR_NULL
+    str_g6_tip_short:           db "Stay focused!", CHAR_NULL
+    str_g6_tip_empty:           db CHAR_NULL
+
+    str_g6_list_label1:         db "Morning Meditation", CHAR_NULL
+    str_g6_list_val1:           db "10m", CHAR_NULL
+    str_g6_list_label2:         db "Deep Coding Session", CHAR_NULL
+    str_g6_list_val2:           db "45m", CHAR_NULL
+
+    str_g6_badge_new:           db "NEW", CHAR_NULL
+    str_g6_badge_pro:           db "PRO", CHAR_NULL
+    str_g6_badge_clipped:       db "VERY_LONG_BADGE_TEXT", CHAR_NULL
+
+    str_g6_check_lbl:           db "Daily Reflection", CHAR_NULL
+
+    ; Keybar table entries: {key_ptr, desc_ptr, priority}
+    str_g6_key_t:               db "T", CHAR_NULL
+    str_g6_desc_t:              db "Theme", CHAR_NULL
+    str_g6_key_c:               db "C", CHAR_NULL
+    str_g6_desc_c:              db "Coat", CHAR_NULL
+    str_g6_key_a:               db "A", CHAR_NULL
+    str_g6_desc_a:              db "ASCII", CHAR_NULL
+    str_g6_key_num:             db "1-3", CHAR_NULL
+    str_g6_desc_num:            db "State", CHAR_NULL
+    str_g6_key_q:               db "Q", CHAR_NULL
+    str_g6_desc_q:              db "Back", CHAR_NULL
+
+    g6_test_keybar_hints:
+        dd str_g6_key_t, str_g6_desc_t, 0
+        dd str_g6_key_c, str_g6_desc_c, 1
+        dd str_g6_key_a, str_g6_desc_a, 0
+        dd str_g6_key_num, str_g6_desc_num, 2
+        dd str_g6_key_q, str_g6_desc_q, 0
+        dd 0, 0, 0              ; NULL terminator
+
 
 section .bss
 

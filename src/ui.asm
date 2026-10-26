@@ -324,6 +324,10 @@ ui_frame_hline_mid:
 ;            border line. Dispatches automatically to top border, bottom border,
 ;            or middle divider based on Row and State. Total width is ui_w cols.
 ;            Appends ESC[K to clear remainder of line.
+;
+; DEPRECATED: Retained for backward compatibility with unmigrated screens.
+;             Preferred replacement API in new code: explicit calls to wdg_panel
+;             or gfx_hline.
 ; IN:        EAX = Row coordinate (1-based)
 ; OUT:       Appends horizontal frame line to out_buf
 ; CLOBBERS:  None (preserves all)
@@ -493,83 +497,16 @@ ui_goto:
     ret
 
 ;=============================================================================
+;=============================================================================
 ; Procedure: ui_layout_update
-; Purpose:   Calculates adaptive layout geometry based on cached terminal
-;            dimensions (term_cols, term_rows):
-;              ui_w = min(term_cols - 2, 100)
-;              ui_h = term_rows
-;              ui_col0 = (term_cols - ui_w) / 2 (0-based horizontal frame margin)
-;            Guarantees valid bounds for undersized terminals (minimum 80x24 fallback).
-;            If terminal dimensions have changed since last frame, appends ansi_clear
-;            to out_buf to remove any leftover characters outside the new layout.
+; Purpose:   Compatibility wrapper for layout_update (PRD_V3 §3.1, Task G6).
+;            Maintains legacy procedure contract for unmigrated callers.
 ; IN:        None (uses [term_cols] and [term_rows])
-; OUT:       Updates [ui_w], [ui_h], [ui_col0], [ui_seen_cols], [ui_seen_rows]
+; OUT:       Updates [layout_tier], [ui_w], [ui_h], [ui_col0], [ui_seen_cols], [ui_seen_rows]
 ; CLOBBERS:  None (preserves all)
 ;=============================================================================
 ui_layout_update:
-    save_regs
-    push eax
-
-    ; Clamp / fallback to minimum dimensions if dimensions are 0 or below minimum
-    mov eax, [term_cols]
-    cmp eax, TERM_MIN_COLS      ; 80
-    jae .cols_ok
-    mov eax, TERM_MIN_COLS
-.cols_ok:
-    mov edx, [term_rows]
-    cmp edx, TERM_MIN_ROWS      ; 24
-    jae .rows_ok
-    mov edx, TERM_MIN_ROWS
-.rows_ok:
-    ; ui_h = term_rows
-    mov [ui_h], edx
-
-    ; ui_w = min(term_cols - 2, 100)
-    sub eax, UI_FRAME_MARGIN_COLS ; term_cols - 2
-    cmp eax, UI_FRAME_MAX_WIDTH  ; 100
-    jbe .w_ok
-    mov eax, UI_FRAME_MAX_WIDTH
-.w_ok:
-    mov [ui_w], eax
-
-    ; Horizontal margin = (term_cols - ui_w) / 2
-    ; ui_col0 = margin (0-based)
-    mov edx, [term_cols]
-    cmp edx, TERM_MIN_COLS
-    jae .term_cols_ok
-    mov edx, TERM_MIN_COLS
-.term_cols_ok:
-    sub edx, eax                ; EDX = term_cols - ui_w
-    shr edx, 1                  ; Integer division by 2
-    mov [ui_col0], edx
-
-    ; If terminal dimensions changed since last layout (and not first run),
-    ; append ansi_clear to clear stale cells from previous geometry
-    mov eax, [term_cols]
-    mov edx, [term_rows]
-    cmp dword [ui_seen_cols], 0
-    jz .record_seen
-
-    cmp eax, [ui_seen_cols]
-    jne .dim_changed
-    cmp edx, [ui_seen_rows]
-    je .record_seen
-
-.dim_changed:
-    mov al, SLOT_BG
-    call ui_bgcolor
-    mov esi, ansi_clear
-    call buf_str
-    mov esi, ansi_reset
-    call buf_str
-
-.record_seen:
-    mov [ui_seen_cols], eax
-    mov [ui_seen_rows], edx
-
-    pop eax
-    restore_regs
-    ret
+    jmp layout_update
 
 ;=============================================================================
 ; Procedure: ui_draw_menu
@@ -1629,6 +1566,523 @@ title_gradient:
     call ui_color
 
 .tg_done:
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
+
+; =============================================================================
+; Task G6 Additions: Layout Test Screen (PRD_V3 §3, §10; Task G6)
+; =============================================================================
+
+;=============================================================================
+; Procedure: layout_test_screen_draw
+; Purpose:   Draws the hidden G6 layout and widget test screen. Exercises all
+;            eleven widgets (wdg_panel, wdg_card, wdg_button, wdg_toggle,
+;            wdg_progress_cat, wdg_stat_card, wdg_tip_card, wdg_list_row,
+;            wdg_badge, wdg_keybar, wdg_checkbox_row) across all states and
+;            demonstrates layout_split_h and layout_split_v.
+; IN:        None
+; OUT:       Appends complete frame to out_buf
+; CLOBBERS:  None (preserves all general-purpose registers and EFLAGS)
+;=============================================================================
+layout_test_screen_draw:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    ; 1. Recalculate layout geometry and tier
+    call layout_update
+
+    ; 2. Invalidate color cache and fill screen background in SLOT_BG
+    call gfx_sgr_forget
+    call gfx_fill_screen_bg
+
+    ; -------------------------------------------------------------------------
+    ; 3. Draw Header Region: banner, title, tier, mode, and state badges
+    ; -------------------------------------------------------------------------
+    mov eax, REGION_HEADER
+    call layout_rect
+    ; EAX = row, EBX = col, ECX = w, EDX = h
+    ; Draw header panel
+    push eax
+    push ebx
+    push ecx
+    push edx
+    mov esi, str_g6_title
+    mov edi, WDG_PANEL_FLAG_TAB
+    call wdg_panel
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+
+    ; Inside header: row + 1: title string
+    inc eax
+    add ebx, 2
+    sub ecx, 4
+    cmp ecx, 2
+    jl .skip_header_content
+
+    ; Title text
+    mov esi, str_g6_title
+    mov dl, SLOT_TITLE
+    mov dh, SLOT_SURFACE
+    call wdg_clip_text
+
+    ; Subtitle badges at row + 2
+    inc eax
+    ; Tier badge
+    mov esi, str_g6_tier_compact
+    cmp dword [layout_tier], TIER_GRAND
+    je .hdr_badge_grand
+    cmp dword [layout_tier], TIER_STANDARD
+    je .hdr_badge_std
+    jmp .hdr_badge_draw
+.hdr_badge_grand:
+    mov esi, str_g6_tier_grand
+    jmp .hdr_badge_draw
+.hdr_badge_std:
+    mov esi, str_g6_tier_standard
+.hdr_badge_draw:
+    mov dl, SLOT_ACCENT
+    mov dh, SLOT_SURFACE
+    call wdg_clip_text
+
+.skip_header_content:
+
+    ; -------------------------------------------------------------------------
+    ; 4. Draw Footer Region: wdg_keybar with key hints
+    ; -------------------------------------------------------------------------
+    mov eax, REGION_FOOTER
+    call layout_rect
+    mov esi, g6_test_keybar_hints
+    call wdg_keybar
+
+    ; -------------------------------------------------------------------------
+    ; 5. Draw Sidebar Region: buttons, toggles, checkboxes
+    ; -------------------------------------------------------------------------
+    mov eax, REGION_SIDEBAR
+    call layout_rect
+    ; EAX = row, EBX = col, ECX = w, EDX = h
+    ; Panel outline for sidebar
+    push eax
+    push ebx
+    push ecx
+    push edx
+    mov esi, 0
+    mov edi, WDG_PANEL_FLAG_NONE
+    call wdg_panel
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+
+    ; Inner sidebar controls:
+    ; Row 1: Focus button (state = layout_test_state)
+    inc eax
+    add ebx, 2
+    sub ecx, 4
+    cmp ecx, 6
+    jl .sidebar_done
+
+    push eax
+    push edx
+    mov edx, 2                  ; height = 2
+    mov esi, sprite_icon_timer_compact
+    mov edi, str_g6_btn_focus
+    mov ebp, [layout_test_state]
+    call wdg_button
+    pop edx
+    pop eax
+
+    ; Row 2: Habits button (normal)
+    add eax, 3
+    cmp eax, [ui_h]
+    jg .sidebar_done
+    push eax
+    push edx
+    mov edx, 2
+    mov esi, sprite_icon_habits_compact
+    mov edi, str_g6_btn_habits
+    mov ebp, WDG_STATE_NORMAL
+    call wdg_button
+    pop edx
+    pop eax
+
+    ; Row 3: Journal button (pressed test)
+    add eax, 3
+    cmp eax, [ui_h]
+    jg .sidebar_done
+    push eax
+    push edx
+    mov edx, 2
+    mov esi, sprite_icon_journal_compact
+    mov edi, str_g6_btn_journal
+    mov ebp, WDG_STATE_PRESSED
+    call wdg_button
+    pop edx
+    pop eax
+
+    ; Row 4: Demo toggle widget
+    add eax, 3
+    cmp eax, [ui_h]
+    jg .sidebar_done
+    push eax
+    push edx
+    mov edx, 2
+    mov esi, str_g6_toggle_label
+    mov edi, [demo_mode]
+    call wdg_toggle
+    pop edx
+    pop eax
+
+    ; Row 5: Checkbox row (checked)
+    add eax, 3
+    cmp eax, [ui_h]
+    jg .sidebar_done
+    push eax
+    push edx
+    mov edx, 1
+    mov esi, str_g6_check_lbl
+    mov edi, 1                  ; checked = 1
+    call wdg_checkbox_row
+    pop edx
+    pop eax
+
+    ; Row 6: Checkbox row (unchecked)
+    inc eax
+    cmp eax, [ui_h]
+    jg .sidebar_done
+    push eax
+    push edx
+    mov edx, 1
+    mov esi, str_g6_list_label2
+    xor edi, edi                ; checked = 0
+    call wdg_checkbox_row
+    pop edx
+    pop eax
+
+.sidebar_done:
+
+    ; -------------------------------------------------------------------------
+    ; 6. Draw Card Regions Inside MAIN
+    ; -------------------------------------------------------------------------
+
+    ; CARD_POMO: Stat card with mascot
+    mov eax, REGION_CARD_POMO
+    call layout_rect
+    mov esi, 13                 ; Pomodoros count
+    mov edi, str_g6_stat_caption
+    call wdg_stat_card
+
+    ; CARD_HABITS: Progress cat card
+    mov eax, REGION_CARD_HABITS
+    call layout_rect
+    ; Draw outer card
+    push eax
+    push ebx
+    push ecx
+    push edx
+    mov esi, str_g6_card_title
+    mov edi, SLOT_SURFACE_ALT
+    call wdg_card
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+
+    ; Inside habits card: wdg_progress_cat
+    inc eax
+    add ebx, 2
+    sub ecx, 4
+    cmp ecx, 8
+    jl .skip_habits_bar
+
+    ; Progress 1: 3/5 with cat head
+    push eax
+    push edx
+    mov edx, 2
+    mov esi, 3
+    mov edi, 5
+    call wdg_progress_cat
+    pop edx
+    pop eax
+
+    ; Progress 2 (if height >= 6): m = 0 guard test (0/0)
+    add eax, 3
+    cmp edx, 6
+    jl .skip_habits_bar
+    push eax
+    push edx
+    mov edx, 2
+    xor esi, esi
+    xor edi, edi                ; m = 0!
+    call wdg_progress_cat
+    pop edx
+    pop eax
+
+.skip_habits_bar:
+
+    ; CARD_TIP: Tip card with word wrap
+    mov eax, REGION_CARD_TIP
+    call layout_rect
+    mov esi, str_g6_tip_body
+    call wdg_tip_card
+
+    ; CARD_JOURNAL_BTN: Action button
+    mov eax, REGION_CARD_JOURNAL_BTN
+    call layout_rect
+    mov esi, 0
+    mov edi, str_g6_btn_journal
+    mov ebp, WDG_STATE_NORMAL
+    call wdg_button
+
+    ; CARD_JOURNAL: Recent notes list rows and badges
+    mov eax, REGION_CARD_JOURNAL
+    call layout_rect
+    ; Draw outer card
+    push eax
+    push ebx
+    push ecx
+    push edx
+    mov esi, str_g6_long_title  ; Test long title clipping!
+    mov edi, SLOT_SURFACE_ALT
+    call wdg_card
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+
+    ; Inside card: list rows
+    inc eax
+    add ebx, 2
+    sub ecx, 4
+    cmp ecx, 10
+    jl .skip_journal_content
+
+    ; List Row 1: Selected
+    push eax
+    push edx
+    mov edx, 1
+    mov esi, str_g6_list_label1
+    mov edi, str_g6_list_val1
+    mov ebp, 1                  ; selected = 1
+    call wdg_list_row
+    pop edx
+    pop eax
+
+    ; List Row 2: Unselected
+    inc eax
+    push eax
+    push edx
+    mov edx, 1
+    mov esi, str_g6_list_label2
+    mov edi, str_g6_list_val2
+    xor ebp, ebp                ; selected = 0
+    call wdg_list_row
+    pop edx
+    pop eax
+
+    ; Badges row:
+    inc eax
+    push eax
+    push ebx
+    push ecx
+    push edx
+    mov edx, 1
+    mov ecx, 6
+    mov esi, str_g6_badge_new
+    mov dl, SLOT_OK
+    mov dh, SLOT_SURFACE
+    call wdg_badge
+
+    ; Second badge
+    add ebx, 7
+    mov ecx, 6
+    mov esi, str_g6_badge_pro
+    mov dl, SLOT_ACCENT
+    mov dh, SLOT_SURFACE
+    call wdg_badge
+
+    ; Intentionally narrow/clipped badge test
+    add ebx, 7
+    mov ecx, 6                  ; only 6 cols for VERY_LONG_BADGE_TEXT
+    mov esi, str_g6_badge_clipped
+    mov dl, SLOT_WARN
+    mov dh, SLOT_SURFACE
+    call wdg_badge
+
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+
+.skip_journal_content:
+
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
+
+;=============================================================================
+; Procedure: layout_test_screen_run
+; Purpose:   Interactive runner for the hidden layout and widget test screen.
+;            Handles resize, theme/coat cycling, ASCII toggle, state toggling,
+;            and clean return to main menu.
+; IN:        None
+; OUT:       None
+; CLOBBERS:  None (preserves all general-purpose registers and EFLAGS)
+;=============================================================================
+layout_test_screen_run:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    ; Save active settings
+    mov al, [setting_theme]
+    push eax                    ; [esp+8] = saved theme
+    mov al, [setting_coat]
+    push eax                    ; [esp+4] = saved coat
+    mov al, [setting_charset]
+    push eax                    ; [esp] = saved charset
+
+    ; Initialize test state: normal (0)
+    mov dword [layout_test_state], WDG_STATE_NORMAL
+
+.test_redraw_loop:
+    call layout_test_screen_draw
+    ; Single-write flush per frame (PRD_V3 invariant!)
+    call buf_flush
+
+.test_key_loop:
+    call key_wait
+    cmp eax, KEY_NONE
+    je .test_key_loop
+
+    ; --- Key Dispatches ---
+    ; Escape or 'Q' or 'q' -> Exit test screen cleanly
+    cmp eax, KEY_ESC
+    je .test_exit_clean
+    cmp eax, 'q'
+    je .test_exit_clean
+    cmp eax, 'Q'
+    je .test_exit_clean
+    cmp eax, CHAR_SPACE
+    je .test_exit_clean
+    cmp eax, KEY_ENTER
+    je .test_exit_clean
+
+    ; Ctrl+C -> Signal app exit
+    cmp eax, KEY_CTRL_C
+    jne .test_check_theme
+    mov dword [state], STATE_QUIT
+    jmp .test_exit_clean
+
+.test_check_theme:
+    ; 't' or 'T' -> Cycle theme (0..6)
+    cmp eax, 't'
+    je .cycle_theme
+    cmp eax, 'T'
+    je .cycle_theme
+    jmp .test_check_coat
+
+.cycle_theme:
+    movzx eax, byte [setting_theme]
+    inc eax
+    cmp eax, 7
+    jb .theme_ok
+    xor eax, eax
+.theme_ok:
+    mov [setting_theme], al
+    call settings_apply_palette
+    jmp .test_redraw_loop
+
+.test_check_coat:
+    ; 'c' or 'C' -> Cycle cat coat (0..5)
+    cmp eax, 'c'
+    je .cycle_coat
+    cmp eax, 'C'
+    je .cycle_coat
+    jmp .test_check_ascii
+
+.cycle_coat:
+    movzx eax, byte [setting_coat]
+    inc eax
+    cmp eax, 6
+    jb .coat_ok
+    xor eax, eax
+.coat_ok:
+    mov [setting_coat], al
+    mov al, [setting_theme]
+    call settings_apply_palette
+    jmp .test_redraw_loop
+
+.test_check_ascii:
+    ; 'a' or 'A' -> Toggle ASCII mode (0 <-> 1)
+    cmp eax, 'a'
+    je .toggle_ascii
+    cmp eax, 'A'
+    je .toggle_ascii
+    jmp .test_check_states
+
+.toggle_ascii:
+    xor byte [setting_charset], 1
+    jmp .test_redraw_loop
+
+.test_check_states:
+    ; '1' -> Normal state
+    cmp eax, '1'
+    jne .check_st2
+    mov dword [layout_test_state], WDG_STATE_NORMAL
+    jmp .test_redraw_loop
+.check_st2:
+    ; '2' -> Focused state
+    cmp eax, '2'
+    jne .check_st3
+    mov dword [layout_test_state], WDG_STATE_FOCUSED
+    jmp .test_redraw_loop
+.check_st3:
+    ; '3' -> Pressed state
+    cmp eax, '3'
+    jne .test_redraw_loop
+    mov dword [layout_test_state], WDG_STATE_PRESSED
+    jmp .test_redraw_loop
+
+.test_exit_clean:
+    ; Restore saved settings so test doesn't inadvertently alter user settings
+    pop eax
+    mov [setting_charset], al
+    pop eax
+    mov [setting_coat], al
+    pop eax
+    mov [setting_theme], al
+    call settings_apply_palette
+
+    ; Clean up screen and signal redraw to menu
+    call gfx_fill_screen_bg
+    mov dword [need_redraw], 1
+
     pop ebp
     pop edi
     pop esi

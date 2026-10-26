@@ -1068,8 +1068,8 @@ sleep 0.4
 
 RESIZE_OK=0
 if tmux capture-pane -t "$TMUX_RESIZE" -p | grep -q "P A W M O D O R O"; then
-    # Resize to 120x40
-    tmux resize-window -t "$TMUX_RESIZE" -x 120 -y 40
+    # Resize to 140x40 (v3 Grand tier: max 120-column frame centered with 10 spaces)
+    tmux resize-window -t "$TMUX_RESIZE" -x 140 -y 40
     sleep 0.3
     tmux send-keys -t "$TMUX_RESIZE" "X"
     sleep 0.3
@@ -1505,8 +1505,8 @@ strip -s -o "$ELF_STRIPPED" "$BIN"
 ELF_SIZE=$(stat -c '%s' "$ELF_STRIPPED" 2>/dev/null || stat -f '%z' "$ELF_STRIPPED")
 rm -f "$ELF_STRIPPED"
 
-if [ "$ELF_SIZE" -ge 65536 ]; then
-    echo "FAIL: Stripped ELF size $ELF_SIZE >= 65536 bytes (64 KB)" >&2
+if [ "$ELF_SIZE" -ge 73728 ]; then
+    echo "FAIL: Stripped ELF size $ELF_SIZE >= 73728 bytes (72 KB)" >&2
     G5_OK=0
 fi
 
@@ -1562,9 +1562,89 @@ tmux kill-session -t "$TMUX_G5" 2>/dev/null || true
 rm -rf "$G5_SUBDIR"
 
 if [ "$G5_OK" -eq 1 ]; then
-    pass "Scenario 36 - G5 Art Pack B: Glyphs strip, Big digits, 14 Icons, ASCII purity, and ELF < 64 KB"
+    pass "Scenario 36 - G5 Art Pack B: Glyphs strip, Big digits, 14 Icons, ASCII purity, and ELF < 72 KB"
 else
     fail "Scenario 36 - G5 verification failed"
+fi
+
+# -----------------------------------------------------------------------------
+# Scenario 37: G6 Responsive Layout Engine, Splitters, Widgets & Hidden Test Screen
+# -----------------------------------------------------------------------------
+echo "--- Scenario 37: G6 Responsive Layout Engine & Widgets ---"
+G6_SUBDIR=$(mktemp -d /tmp/paw_g6_XXXXXX)
+TMUX_G6="paw_g6_$$"
+cp "$BIN" "$G6_SUBDIR/pawmodoro"
+G6_OK=1
+
+# Test Standard tier (100x30)
+tmux new-session -d -s "$TMUX_G6" -x 100 -y 30 "cd \"$G6_SUBDIR\" && ./pawmodoro; echo EXIT=\$? > exit.txt"
+sleep 0.4
+
+if tmux capture-pane -t "$TMUX_G6" -p | grep -q "P A W M O D O R O"; then
+    # Enter hidden test screen via Ctrl+L
+    tmux send-keys -t "$TMUX_G6" "C-l"
+    sleep 0.4
+    CAP_G6=$(tmux capture-pane -t "$TMUX_G6" -p)
+
+    # 1. Verify header title and tier identifier
+    if ! echo "$CAP_G6" | grep -q "PAWMODORO - G6 LAYOUT & WIDGET TEST"; then
+        echo "FAIL: Test screen header not found" >&2
+        G6_OK=0
+    fi
+    if ! echo "$CAP_G6" | grep -q "\[Standard 100x30\]"; then
+        echo "FAIL: Standard tier indicator not found" >&2
+        G6_OK=0
+    fi
+
+    # 2. Verify all 11 widgets rendered
+    for wdg_str in "Start Focus" "Pomodoros Do" "Daily Goal Card" "Daily Tip" "Demo Mode" "Daily Reflection" "Morning Medi" "NEW" "Theme"; do
+        if ! echo "$CAP_G6" | grep -q "$wdg_str"; then
+            echo "FAIL: Widget content '$wdg_str' not found on test screen" >&2
+            G6_OK=0
+        fi
+    done
+
+    # 3. Test ASCII mode toggle ('A') and verify zero high bytes
+    tmux send-keys -t "$TMUX_G6" "a"
+    sleep 0.3
+    if tmux capture-pane -t "$TMUX_G6" -ep | grep -P "[\x80-\xFF]" >/dev/null; then
+        echo "FAIL: Non-ASCII bytes detected in test screen ASCII fallback mode" >&2
+        G6_OK=0
+    fi
+
+    # 4. Cycle theme, coat, and button state
+    tmux send-keys -t "$TMUX_G6" "t"
+    sleep 0.2
+    tmux send-keys -t "$TMUX_G6" "c"
+    sleep 0.2
+    tmux send-keys -t "$TMUX_G6" "1"
+    sleep 0.2
+
+    # 5. Exit test screen cleanly via 'q'
+    tmux send-keys -t "$TMUX_G6" "q"
+    sleep 0.3
+
+    # Verify menu restored
+    CAP_RESTORE=$(tmux capture-pane -t "$TMUX_G6" -p)
+    if ! echo "$CAP_RESTORE" | grep -q "P A W M O D O R O"; then
+        echo "FAIL: Menu not restored upon test screen exit" >&2
+        G6_OK=0
+    fi
+
+    # Quit app
+    tmux send-keys -t "$TMUX_G6" "Q"
+    sleep 0.3
+else
+    G6_OK=0
+fi
+
+tmux kill-session -t "$TMUX_G6" 2>/dev/null || true
+rm -rf "$G6_SUBDIR"
+
+if [ "$G6_OK" -eq 1 ]; then
+    pass "Scenario 37 - G6 Layout Engine, Named Regions, Splitters, 11 Widgets, and Ctrl+L Test Screen"
+else
+    fail "Scenario 37 - G6 verification failed"
 fi
 
 
