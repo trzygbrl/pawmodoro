@@ -795,6 +795,7 @@ section .data
     str_viewer_coat:        db " | Coat: ", CHAR_NULL
     str_viewer_fill:        db "Fill Slot: ", CHAR_NULL
     str_viewer_pos:         db " | Pos: ", CHAR_NULL
+    str_viewer_glyphs:      db "Approved Glyphs: ", CHAR_NULL
     str_viewer_help:        db "[< / >] Sprite   [^ / v] Frame   [T] Theme   [C] Coat   [A] ASCII   [+/-] Fill   [1-9] Edges   [Esc] Back", CHAR_NULL
 
     str_pos_center:         db "Center (Normal)", CHAR_NULL
@@ -1301,6 +1302,32 @@ sprite_viewer_draw:
     mov esi, [pos_names + edx*4]
     call buf_str
 
+    ; 6b. Metadata Row 5: Approved Glyphs Preview Strip
+    mov eax, 8
+    mov ebx, 3
+    call ui_goto
+    mov al, SLOT_DIM
+    call gfx_set_fg
+    mov esi, str_viewer_glyphs
+    call buf_str
+
+    mov al, SLOT_ACCENT
+    call gfx_set_fg
+    xor ecx, ecx
+.viewer_glyph_loop:
+    cmp ecx, GLYPH_COUNT
+    jae .viewer_glyph_done
+    push ecx
+    mov eax, ecx
+    call ui_glyph_str
+    call buf_str
+    mov al, CHAR_SPACE
+    call buf_char
+    pop ecx
+    inc ecx
+    jmp .viewer_glyph_loop
+.viewer_glyph_done:
+
     ; -------------------------------------------------------------------------
     ; 7. Calculate Sprite Destination Coordinates Based on Edge Mode & Nudge
     ; -------------------------------------------------------------------------
@@ -1308,15 +1335,15 @@ sprite_viewer_draw:
     mov esi, [sprite_table + edx*4]
     call sprite_info            ; EAX = w_cells, EBX = h_cells
 
-    ; Default: centered within usable space (rows 9..ui_h-2)
-    ; center_row = (ui_h - h_cells) / 2 + 3
+    ; Default: centered within usable space (rows 10..ui_h-2)
+    ; center_row = (ui_h - h_cells) / 2 + 4
     mov ecx, [ui_h]
     sub ecx, ebx
     shr ecx, 1
-    add ecx, 3                  ; ECX = default center_row
-    cmp ecx, 9
+    add ecx, 4                  ; ECX = default center_row
+    cmp ecx, 10
     jge .row_min_ok
-    mov ecx, 9
+    mov ecx, 10
 .row_min_ok:
 
     ; center_col = (ui_w - w_cells) / 2 + 1

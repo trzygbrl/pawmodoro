@@ -710,6 +710,15 @@ section .data
     glyph_utf8_bar_full:        db 0xE2, 0x96, 0xB0, CHAR_NULL  ; ▰
     glyph_utf8_bar_empty:       db 0xE2, 0x96, 0xB1, CHAR_NULL  ; ▱
     glyph_utf8_sparkle:         db 0xE2, 0x9C, 0xA6, CHAR_NULL  ; ✦
+    glyph_utf8_half_upper:      db 0xE2, 0x96, 0x80, CHAR_NULL  ; ▀
+    glyph_utf8_half_lower:      db 0xE2, 0x96, 0x84, CHAR_NULL  ; ▄
+    glyph_utf8_block_full:      db 0xE2, 0x96, 0x88, CHAR_NULL  ; █
+    glyph_utf8_block_left:      db 0xE2, 0x96, 0x8C, CHAR_NULL  ; ▌
+    glyph_utf8_block_right:     db 0xE2, 0x96, 0x90, CHAR_NULL  ; ▐
+    glyph_utf8_shade_light:     db 0xE2, 0x96, 0x91, CHAR_NULL  ; ░
+    glyph_utf8_shade_med:       db 0xE2, 0x96, 0x92, CHAR_NULL  ; ▒
+    glyph_utf8_shade_dark:      db 0xE2, 0x96, 0x93, CHAR_NULL  ; ▓
+    glyph_utf8_checkmark:       db 0xE2, 0x9C, 0x93, CHAR_NULL  ; ✓
 
     glyph_utf8_table:
         dd glyph_utf8_hline, glyph_utf8_vline
@@ -720,8 +729,13 @@ section .data
         dd glyph_utf8_dot_filled, glyph_utf8_dot_empty
         dd glyph_utf8_bar_full, glyph_utf8_bar_empty
         dd glyph_utf8_sparkle
+        dd glyph_utf8_half_upper, glyph_utf8_half_lower
+        dd glyph_utf8_block_full, glyph_utf8_block_left
+        dd glyph_utf8_block_right, glyph_utf8_shade_light
+        dd glyph_utf8_shade_med, glyph_utf8_shade_dark
+        dd glyph_utf8_checkmark
 
-    ; UI ASCII Fallback Glyphs
+    ; UI ASCII Fallback Glyphs (All bytes strictly < 0x80)
     glyph_ascii_hline:          db "-", CHAR_NULL
     glyph_ascii_vline:          db "|", CHAR_NULL
     glyph_ascii_corner_tl:      db "+", CHAR_NULL
@@ -737,6 +751,15 @@ section .data
     glyph_ascii_bar_full:       db "#", CHAR_NULL
     glyph_ascii_bar_empty:      db "-", CHAR_NULL
     glyph_ascii_sparkle:        db "*", CHAR_NULL
+    glyph_ascii_half_upper:     db "-", CHAR_NULL
+    glyph_ascii_half_lower:     db "_", CHAR_NULL
+    glyph_ascii_block_full:     db "#", CHAR_NULL
+    glyph_ascii_block_left:     db "|", CHAR_NULL
+    glyph_ascii_block_right:    db "|", CHAR_NULL
+    glyph_ascii_shade_light:    db ".", CHAR_NULL
+    glyph_ascii_shade_med:      db ":", CHAR_NULL
+    glyph_ascii_shade_dark:     db "#", CHAR_NULL
+    glyph_ascii_checkmark:      db "v", CHAR_NULL
 
     glyph_ascii_table:
         dd glyph_ascii_hline, glyph_ascii_vline
@@ -747,6 +770,89 @@ section .data
         dd glyph_ascii_dot_filled, glyph_ascii_dot_empty
         dd glyph_ascii_bar_full, glyph_ascii_bar_empty
         dd glyph_ascii_sparkle
+        dd glyph_ascii_half_upper, glyph_ascii_half_lower
+        dd glyph_ascii_block_full, glyph_ascii_block_left
+        dd glyph_ascii_block_right, glyph_ascii_shade_light
+        dd glyph_ascii_shade_med, glyph_ascii_shade_dark
+        dd glyph_ascii_checkmark
+
+    ; Precomputed 12-Entry Color Ramps per Theme for title_gradient (Task G5, PRD_V3 §6)
+    ; 8 themes x 12 bytes = 96 bytes total
+    theme_title_ramps:
+        ; Theme 0: Strawberry Milk (204 -> 218)
+        db 204, 204, 205, 211, 211, 212, 212, 218, 218, 219, 224, 225
+        ; Theme 1: Matcha Latte (114 -> 157)
+        db 114, 114, 115, 121, 150, 150, 151, 157, 157, 158, 193, 194
+        ; Theme 2: Blueberry (75 -> 111)
+        db 75,  75,  68,  68,  110, 110, 111, 111, 147, 147, 153, 153
+        ; Theme 3: Lavender Night (141 -> 183)
+        db 141, 141, 140, 147, 147, 183, 183, 182, 189, 189, 225, 225
+        ; Theme 4: Sunset Peach (209 -> 216)
+        db 209, 209, 215, 215, 216, 216, 222, 222, 223, 223, 224, 224
+        ; Theme 5: Mono Cozy (255 -> 250)
+        db 255, 255, 254, 253, 252, 251, 250, 250, 249, 248, 247, 246
+        ; Theme 6: High Contrast (231 -> 231)
+        db 231, 231, 231, 231, 231, 231, 231, 231, 231, 231, 231, 231
+        ; Theme 7: Custom (defaults to Theme 0)
+        db 204, 204, 205, 211, 211, 212, 212, 218, 218, 219, 224, 225
+
+    ; ASCII-mode large digits: 11 glyphs (0-9, colon), each 4 lines x 5 characters
+    ascii_bigdigit_lines:
+        ; '0'
+        db " _ _ "
+        db "|   |"
+        db "|   |"
+        db "|_ _|"
+        ; '1'
+        db "  _  "
+        db " / | "
+        db "   | "
+        db "  _|_"
+        ; '2'
+        db " _ _ "
+        db "    /"
+        db " _ _ "
+        db "|_ _ "
+        ; '3'
+        db " _ _ "
+        db "    /"
+        db "  _ \"
+        db " _ _/"
+        ; '4'
+        db "     "
+        db "|   |"
+        db "|_ _|"
+        db "    |"
+        ; '5'
+        db " _ _ "
+        db "|_ _ "
+        db "    \"
+        db " _ _/"
+        ; '6'
+        db " _ _ "
+        db "|_ _ "
+        db "|   |"
+        db "|_ _|"
+        ; '7'
+        db " _ _ "
+        db "    /"
+        db "   / "
+        db "  /  "
+        ; '8'
+        db " _ _ "
+        db "|_ _|"
+        db "|   |"
+        db "|_ _|"
+        ; '9'
+        db " _ _ "
+        db "|_ _|"
+        db "    |"
+        db " _ _|"
+        ; ':' (colon)
+        db "     "
+        db "  o  "
+        db "     "
+        db "  o  "
 
     ; Task V7 Animation Strings & Tables
     cat_tail_0:                 db " > ^ < ", CHAR_NULL

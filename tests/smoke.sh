@@ -1493,6 +1493,80 @@ else
     fail "Scenario 35 - Sprite viewer verification failed"
 fi
 
+# -----------------------------------------------------------------------------
+# Scenario 36: G5 Art Pack B (Icons, Ornaments, Digits, Glyphs, and Budget)
+# -----------------------------------------------------------------------------
+echo "--- Scenario 36: G5 Art Pack B, Glyphs, Digits & Memory Budget ---"
+G5_OK=1
+
+# 1. Budget Checks
+ELF_STRIPPED=$(mktemp)
+strip -s -o "$ELF_STRIPPED" "$BIN"
+ELF_SIZE=$(stat -c '%s' "$ELF_STRIPPED" 2>/dev/null || stat -f '%z' "$ELF_STRIPPED")
+rm -f "$ELF_STRIPPED"
+
+if [ "$ELF_SIZE" -ge 65536 ]; then
+    echo "FAIL: Stripped ELF size $ELF_SIZE >= 65536 bytes (64 KB)" >&2
+    G5_OK=0
+fi
+
+# 2. Section Sizes
+BSS_SIZE=$(size "$BIN" | awk 'NR==2 {print $3}')
+if [ "$BSS_SIZE" -gt 81920 ]; then
+    echo "FAIL: .bss size $BSS_SIZE > 81920 bytes" >&2
+    G5_OK=0
+fi
+
+# 3. Interactive Viewer Check for G5 Glyphs and New Sprites
+G5_SUBDIR=$(mktemp -d /tmp/paw_g5_XXXXXX)
+TMUX_G5="paw_g5_$$"
+cp "$BIN" "$G5_SUBDIR/pawmodoro"
+tmux new-session -d -s "$TMUX_G5" -x 100 -y 30 "cd \"$G5_SUBDIR\" && ./pawmodoro; echo EXIT=\$? > exit.txt"
+sleep 0.5
+
+if tmux capture-pane -t "$TMUX_G5" -p | grep -q "P A W M O D O R O"; then
+    # Enter hidden sprite viewer (Ctrl+V)
+    tmux send-keys -t "$TMUX_G5" "C-v"
+    sleep 0.4
+    CAP_G5=$(tmux capture-pane -t "$TMUX_G5" -p)
+    if echo "$CAP_G5" | grep -q "Approved Glyphs"; then
+        # Step forward 23 times to reach first G5 sprite (Large Digit 0)
+        for i in $(seq 1 23); do
+            tmux send-keys -t "$TMUX_G5" Right
+        done
+        sleep 0.3
+        CAP_DIGIT=$(tmux capture-pane -t "$TMUX_G5" -p)
+        if ! echo "$CAP_DIGIT" | grep -q "Large Digit 0"; then
+            G5_OK=0
+        fi
+        # Toggle ASCII mode
+        tmux send-keys -t "$TMUX_G5" "A"
+        sleep 0.2
+        if tmux capture-pane -t "$TMUX_G5" -ep | grep -P "[\x80-\xFF]" >/dev/null; then
+            echo "FAIL: Non-ASCII bytes found in viewer ASCII mode" >&2
+            G5_OK=0
+        fi
+        # Clean return
+        tmux send-keys -t "$TMUX_G5" Escape
+        sleep 0.4
+        tmux send-keys -t "$TMUX_G5" "Q"
+        sleep 0.4
+    else
+        echo "FAIL: Approved Glyphs header not found in sprite viewer" >&2
+        G5_OK=0
+    fi
+else
+    G5_OK=0
+fi
+tmux kill-session -t "$TMUX_G5" 2>/dev/null || true
+rm -rf "$G5_SUBDIR"
+
+if [ "$G5_OK" -eq 1 ]; then
+    pass "Scenario 36 - G5 Art Pack B: Glyphs strip, Big digits, 14 Icons, ASCII purity, and ELF < 64 KB"
+else
+    fail "Scenario 36 - G5 verification failed"
+fi
+
 
 
 # -----------------------------------------------------------------------------

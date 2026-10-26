@@ -660,7 +660,20 @@ GLYPH_DOT_EMPTY         equ 11          ; ○ or o
 GLYPH_BAR_FULL          equ 12          ; ▰ or #
 GLYPH_BAR_EMPTY         equ 13          ; ▱ or -
 GLYPH_SPARKLE           equ 14          ; ✦ or *
-GLYPH_COUNT             equ 15
+GLYPH_HALF_UPPER        equ 15          ; ▀ or -
+GLYPH_HALF_LOWER        equ 16          ; ▄ or _
+GLYPH_BLOCK_FULL        equ 17          ; █ or #
+GLYPH_BLOCK_LEFT        equ 18          ; ▌ or |
+GLYPH_BLOCK_RIGHT       equ 19          ; ▐ or |
+GLYPH_SHADE_LIGHT       equ 20          ; ░ or .
+GLYPH_SHADE_MED         equ 21          ; ▒ or :
+GLYPH_SHADE_DARK        equ 22          ; ▓ or #
+GLYPH_CHECKMARK         equ 23          ; ✓ or v
+GLYPH_COUNT             equ 24
+
+; Big Digit Formatting Flags (Task G5, PRD_V3 §10, §bigdigit_draw)
+BIGDIGIT_FMT_NUM        equ 0           ; Ordinary numeric format (0..99)
+BIGDIGIT_FMT_MMSS       equ 1           ; Minutes:Seconds format (00:00..99:59)
 
 COZY_TIPS_COUNT         equ 7           ; Number of deterministic daily cozy tips
 

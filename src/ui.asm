@@ -1241,3 +1241,400 @@ ui_draw_status:
     pop eax
     restore_regs
     ret
+
+; =============================================================================
+; Task G5 Procedures: Big Digit Display & Theme Title Gradient (PRD_V3 §6, §10)
+; =============================================================================
+
+global bigdigit_draw
+global title_gradient
+
+;=============================================================================
+; Procedure: bigdigit_draw
+; Purpose:   Renders large pixel-art timer/numeric digits into out_buf at (row, col)
+;            with a 1-cell horizontal gap between glyphs. In UTF-8 mode, draws
+;            5x4-cell half-block sprites; in ASCII mode (setting_charset == 1),
+;            renders 5x4 7-bit ASCII text representations.
+; IN:        EAX = Starting terminal row (1-based)
+;            EBX = Starting terminal column (1-based)
+;            ECX = Numeric value (0..99) or duration in seconds (0..5999)
+;            EDX = Format flag:
+;                  BIGDIGIT_FMT_NUM (0)  = Ordinary numeric display (0..99)
+;                  BIGDIGIT_FMT_MMSS (1) = Minutes:Seconds display (00:00..99:59)
+; OUT:       Appends complete formatted digits to out_buf (leaves cursor at end)
+; CLOBBERS:  None (preserves all general-purpose registers and EFLAGS)
+;=============================================================================
+bigdigit_draw:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    sub esp, 28                 ; Local frame:
+                                ; [esp + 0]  = d0 (first digit, 0..9)
+                                ; [esp + 4]  = d1 (second digit, 0..9)
+                                ; [esp + 8]  = d2 (third digit, 0..9 or -1)
+                                ; [esp + 12] = d3 (fourth digit, 0..9 or -1)
+                                ; [esp + 16] = format flag (0 or 1)
+                                ; [esp + 20] = start_row (1-based)
+                                ; [esp + 24] = start_col (1-based)
+
+    mov [esp + 20], eax         ; Save row
+    mov [esp + 24], ebx         ; Save col
+    mov [esp + 16], edx         ; Save format
+
+    ; -------------------------------------------------------------------------
+    ; 1. Input Validation and Digit Decomposition
+    ; -------------------------------------------------------------------------
+    cmp edx, BIGDIGIT_FMT_MMSS
+    jne .fmt_numeric
+
+    ; --- Format MM:SS ---
+    ; Clamp seconds to 0..5999 (99:59)
+    test ecx, ecx
+    jns .val_not_neg
+    xor ecx, ecx
+.val_not_neg:
+    cmp ecx, 5999
+    jbe .val_sec_ok
+    mov ecx, 5999
+.val_sec_ok:
+    ; Minutes M = ECX / 60, Seconds S = ECX % 60
+    mov eax, ecx
+    xor edx, edx
+    mov ebx, 60
+    div ebx                     ; EAX = M, EDX = S
+
+    ; d0 = M / 10, d1 = M % 10
+    push edx                    ; Save seconds S
+    xor edx, edx
+    mov ebx, 10
+    div ebx
+    mov [esp + 4], eax          ; d0 = M / 10
+    mov [esp + 8], edx          ; d1 = M % 10
+    pop eax                     ; EAX = seconds S
+
+    ; d2 = S / 10, d3 = S % 10
+    xor edx, edx
+    mov ebx, 10
+    div ebx
+    mov [esp + 8], eax          ; d2 = S / 10
+    mov [esp + 12], edx         ; d3 = S % 10
+    jmp .draw_digits
+
+.fmt_numeric:
+    ; --- Format Numeric (0..99) ---
+    mov dword [esp + 16], BIGDIGIT_FMT_NUM ; Force safe format 0
+    test ecx, ecx
+    jns .num_not_neg
+    xor ecx, ecx
+.num_not_neg:
+    cmp ecx, 99
+    jbe .num_ok
+    mov ecx, 99
+.num_ok:
+    mov eax, ecx
+    xor edx, edx
+    mov ebx, 10
+    div ebx
+    mov [esp + 0], eax          ; d0 = val / 10
+    mov [esp + 4], edx          ; d1 = val % 10
+    mov dword [esp + 8], -1     ; d2 = none
+    mov dword [esp + 12], -1    ; d3 = none
+
+.draw_digits:
+    ; -------------------------------------------------------------------------
+    ; 2. Charset Branch: ASCII mode vs UTF-8 half-block mode
+    ; -------------------------------------------------------------------------
+    cmp byte [setting_charset], 1
+    je .draw_ascii_mode
+
+    ; -------------------------------------------------------------------------
+    ; 3. UTF-8 Half-Block Rendering Path (using sprite_draw)
+    ; -------------------------------------------------------------------------
+    ; Draw d0 at (start_row, start_col)
+    mov edx, [esp + 0]          ; edx = d0
+    mov esi, [digit_large_sprites + edx*4]
+    mov eax, [esp + 20]         ; row
+    mov ebx, [esp + 24]         ; col
+    xor ecx, ecx                ; frame 0
+    mov edx, SLOT_BG
+    call sprite_draw
+
+    ; Draw d1 at (start_row, start_col + 6)
+    mov edx, [esp + 4]          ; edx = d1
+    mov esi, [digit_large_sprites + edx*4]
+    mov eax, [esp + 20]         ; row
+    mov ebx, [esp + 24]
+    add ebx, 6                  ; col + 6 (5 cells + 1 gap)
+    xor ecx, ecx
+    mov edx, SLOT_BG
+    call sprite_draw
+
+    ; If format != MMSS, done with UTF-8
+    cmp dword [esp + 16], BIGDIGIT_FMT_MMSS
+    jne .bigdigit_exit
+
+    ; Draw Colon ':' at (start_row, start_col + 12)
+    mov esi, [digit_large_sprites + 10*4] ; colon sprite
+    mov eax, [esp + 20]
+    mov ebx, [esp + 24]
+    add ebx, 12                 ; col + 12
+    xor ecx, ecx
+    mov edx, SLOT_BG
+    call sprite_draw
+
+    ; Draw d2 at (start_row, start_col + 16)
+    mov edx, [esp + 8]          ; edx = d2
+    mov esi, [digit_large_sprites + edx*4]
+    mov eax, [esp + 20]
+    mov ebx, [esp + 24]
+    add ebx, 16                 ; col + 16 (12 + 3 colon + 1 gap)
+    xor ecx, ecx
+    mov edx, SLOT_BG
+    call sprite_draw
+
+    ; Draw d3 at (start_row, start_col + 22)
+    mov edx, [esp + 12]         ; edx = d3
+    mov esi, [digit_large_sprites + edx*4]
+    mov eax, [esp + 20]
+    mov ebx, [esp + 24]
+    add ebx, 22                 ; col + 22 (16 + 5 + 1)
+    xor ecx, ecx
+    mov edx, SLOT_BG
+    call sprite_draw
+    jmp .bigdigit_exit
+
+    ; -------------------------------------------------------------------------
+    ; 4. ASCII Mode Rendering Path (7-bit characters, 4 lines high)
+    ; -------------------------------------------------------------------------
+.draw_ascii_mode:
+    xor ebp, ebp                ; ebp = line index (0..3)
+
+.ascii_line_loop:
+    cmp ebp, 4
+    jae .bigdigit_exit
+
+    ; Position cursor at (start_row + ebp, start_col)
+    mov eax, [esp + 20]
+    add eax, ebp
+    mov ebx, [esp + 24]
+    call ui_goto
+
+    ; Apply title color for ASCII digits
+    mov al, SLOT_TITLE
+    call ui_color
+
+    ; --- Emit d0 line ebp (5 chars) ---
+    mov eax, [esp + 0]          ; d0
+    imul eax, 20                ; 20 bytes per digit (4 lines * 5 chars)
+    lea edx, [ebp * 4 + ebp]    ; edx = ebp * 5
+    add eax, edx
+    lea esi, [ascii_bigdigit_lines + eax]
+    mov ecx, 5
+.emit_d0_chars:
+    lodsb
+    call buf_char
+    loop .emit_d0_chars
+
+    ; 1-cell gap
+    mov al, CHAR_SPACE
+    call buf_char
+
+    ; --- Emit d1 line ebp (5 chars) ---
+    mov eax, [esp + 4]          ; d1
+    imul eax, 20
+    lea edx, [ebp * 4 + ebp]
+    add eax, edx
+    lea esi, [ascii_bigdigit_lines + eax]
+    mov ecx, 5
+.emit_d1_chars:
+    lodsb
+    call buf_char
+    loop .emit_d1_chars
+
+    ; Check if MM:SS format
+    cmp dword [esp + 16], BIGDIGIT_FMT_MMSS
+    jne .ascii_line_next
+
+    ; --- Emit Colon line ebp (3 chars: center 3 of 5) ---
+    mov al, CHAR_SPACE
+    call buf_char
+    mov eax, 10                 ; colon index = 10
+    imul eax, 20
+    lea edx, [ebp * 4 + ebp]
+    add eax, edx
+    add eax, 1                  ; offset into 3 center chars
+    lea esi, [ascii_bigdigit_lines + eax]
+    mov ecx, 3
+.emit_colon_chars:
+    lodsb
+    call buf_char
+    loop .emit_colon_chars
+
+    mov al, CHAR_SPACE
+    call buf_char
+
+    ; --- Emit d2 line ebp (5 chars) ---
+    mov eax, [esp + 8]          ; d2
+    imul eax, 20
+    lea edx, [ebp * 4 + ebp]
+    add eax, edx
+    lea esi, [ascii_bigdigit_lines + eax]
+    mov ecx, 5
+.emit_d2_chars:
+    lodsb
+    call buf_char
+    loop .emit_d2_chars
+
+    mov al, CHAR_SPACE
+    call buf_char
+
+    ; --- Emit d3 line ebp (5 chars) ---
+    mov eax, [esp + 12]         ; d3
+    imul eax, 20
+    lea edx, [ebp * 4 + ebp]
+    add eax, edx
+    lea esi, [ascii_bigdigit_lines + eax]
+    mov ecx, 5
+.emit_d3_chars:
+    lodsb
+    call buf_char
+    loop .emit_d3_chars
+
+.ascii_line_next:
+    inc ebp
+    jmp .ascii_line_loop
+
+.bigdigit_exit:
+    ; Restore text color and reset styles
+    mov al, SLOT_TEXT
+    call ui_color
+    call gfx_sgr_forget
+
+    add esp, 28
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
+
+;=============================================================================
+; Procedure: title_gradient
+; Purpose:   Renders spaced title string with a theme-aware color gradient into
+;            out_buf. Spaced letters like "P A W M O D O R O" transition smoothly
+;            from SLOT_TITLE to SLOT_TITLE_ALT across a precomputed 12-entry
+;            color ramp per theme.
+; IN:        ESI = Pointer to NUL-terminated title string
+;            EAX = Starting terminal row (1-based)
+;            EBX = Starting terminal column (1-based)
+;            CL  = Starting color slot (SLOT_TITLE)
+;            CH  = Ending color slot (SLOT_TITLE_ALT)
+; OUT:       Appends spaced, gradient-colored title to out_buf
+; CLOBBERS:  None (preserves all general-purpose registers and EFLAGS)
+;=============================================================================
+title_gradient:
+    pushf
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    push ebp
+
+    test esi, esi
+    jz .tg_done
+
+    ; Measure string length
+    xor edx, edx
+.tg_len_loop:
+    cmp byte [esi + edx], 0
+    je .tg_len_found
+    inc edx
+    jmp .tg_len_loop
+.tg_len_found:
+    test edx, edx
+    jz .tg_done                 ; Empty string: exit
+
+    mov ebp, edx                ; EBP = length (L)
+
+    ; Position cursor at (row, col)
+    call ui_goto
+
+    ; Determine active theme ramp base
+    movzx eax, byte [setting_theme]
+    cmp eax, NUM_BUILTIN_THEMES
+    jb .tg_theme_ok
+    xor eax, eax
+.tg_theme_ok:
+    imul eax, 12                ; 12 bytes per ramp
+    lea edi, [theme_title_ramps + eax] ; EDI = ramp table pointer
+
+    xor ecx, ecx                ; ECX = character index i (0..L-1)
+
+.tg_char_loop:
+    cmp ecx, ebp
+    jae .tg_finish
+
+    ; Compute ramp index: ramp_idx = (i * 12) / L
+    mov eax, ecx
+    imul eax, 12
+    xor edx, edx
+    div ebp                     ; EAX = quotient (0..11)
+    cmp eax, 11
+    jbe .tg_ramp_ok
+    mov eax, 11
+.tg_ramp_ok:
+    ; Look up color byte (0..255)
+    movzx eax, byte [edi + eax]
+
+    ; Emit ESC[38;5;Nm escape sequence
+    push esi
+    mov esi, ansi_fg_256_prefix
+    call buf_str
+    call buf_u32
+    mov al, CHAR_LOWER_M
+    call buf_char
+    pop esi
+
+    ; Emit character ESI[i]
+    mov al, [esi + ecx]
+    call buf_char
+
+    ; If not last character, emit space
+    mov eax, ecx
+    inc eax
+    cmp eax, ebp
+    jae .tg_next_char
+    mov al, CHAR_SPACE
+    call buf_char
+
+.tg_next_char:
+    inc ecx
+    jmp .tg_char_loop
+
+.tg_finish:
+    ; Invalidate color cache and restore standard text color
+    call gfx_sgr_forget
+    mov al, SLOT_TEXT
+    call ui_color
+
+.tg_done:
+    pop ebp
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    popf
+    ret
